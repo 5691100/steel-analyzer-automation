@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: agent-core/package-lock.json
+
+      - name: Install dependencies
+        working-directory: agent-core
+        run: npm ci
+
+      - name: Syntax check steel-drive.mjs
+        run: node --check agent-core/scripts/steel-drive.mjs
+
+      - name: Syntax check steel-orchestrator.mjs
+        run: node --check agent-core/scripts/steel-orchestrator.mjs
+
+      - name: Secret scan (high-confidence token values)
+        run: |
+          echo "Scanning for high-confidence token patterns..."
+          if rg -rn \
+            'ya29\.[A-Za-z0-9_-]{10,}|AIza[0-9A-Za-z_-]{35}|ghp_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{30,}|xoxb-[0-9]+-[A-Za-z0-9]+|-----BEGIN (RSA |EC )?PRIVATE KEY' \
+            --glob '!*.lock' \
+            --glob '!steel-bus/' \
+            .; then
+            echo "FAIL: secret token pattern found"
+            exit 1
+          else
+            echo "PASS: no secret token patterns found"
+          fi
+
+      - name: Webhook URL guard
+        run: |
+          echo "Checking for legacy n8n webhook URLs in scripts..."
+          if rg -n 'UPLOAD_WEBHOOK_URL|codexclaw-eugeniy-auto-drive-upload' \
+            agent-core/scripts/; then
+            echo "FAIL: legacy webhook URL found in active scripts"
+            exit 1
+          else
+            echo "PASS: no legacy webhook URLs found"
+          fi
+
+      - name: Dependency audit (informational)
+        working-directory: agent-core
+        run: npm audit --audit-level=high || true

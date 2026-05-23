@@ -23,7 +23,11 @@ cd agent-core
 npm install
 node scripts/steel-drive.mjs setup-oauth --clientId YOUR_CLIENT_ID --clientSecret YOUR_CLIENT_SECRET
 ```
-Follow the browser prompt. Token is stored at `agent-core/secrets/oauth-token.json` (mode 0600, directory 0700). **Never commit secrets.**
+This prints the auth URL. Visit it, approve access, copy the code, then exchange it non-interactively:
+```bash
+node scripts/steel-drive.mjs setup-oauth --clientId YOUR_CLIENT_ID --clientSecret YOUR_CLIENT_SECRET --code YOUR_AUTH_CODE
+```
+Token is stored at `~/.config/codexclaw/secrets/google-oauth-user.json` (mode 0600, directory 0700). **Never commit secrets.**
 
 ## Usage
 

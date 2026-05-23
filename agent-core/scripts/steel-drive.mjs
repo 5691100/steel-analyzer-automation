@@ -167,40 +167,29 @@ async function setupOauth(params) {
     scope: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly'],
   });
 
-  console.log('\nAuthorize this app by visiting this url:');
-  console.log(authUrl);
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.question('\nEnter the code from that page here: ', async (code) => {
-    rl.close();
+  if (params.code) {
     try {
-      const { tokens } = await oauth2Client.getToken(code);
-      const storage = {
-        client_id: clientId,
-        client_secret: clientSecret,
-        token: tokens,
-        updated_at: new Date().toISOString()
-      };
-
-      // Ensure secrets directory exists with restricted permissions
-      const secretsDir = path.dirname(OAUTH_TOKEN_PATH);
-      if (!fs.existsSync(secretsDir)) {
-        fs.mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
-      } else {
-        fs.chmodSync(secretsDir, 0o700);
-      }
-
-      // Write token file and restrict its permissions
-      fs.writeFileSync(OAUTH_TOKEN_PATH, JSON.stringify(storage, null, 2));
+      const { tokens } = await oauth2Client.getToken(params.code);
+      const storage = { client_id: clientId, client_secret: clientSecret, token: tokens, updated_at: new Date().toISOString() };
+      atomicWriteJson(OAUTH_TOKEN_PATH, storage);
+      // Ensure secrets directory and file have restricted permissions
+      const dir = path.dirname(OAUTH_TOKEN_PATH);
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       fs.chmodSync(OAUTH_TOKEN_PATH, 0o600);
-
       console.log(`\n✓ OAuth token saved to ${OAUTH_TOKEN_PATH}`);
-      console.log(`  Directory permissions: 0700, file permissions: 0600`);
+      console.log('   scope:', tokens.scope);
+      console.log('   refresh_token:', tokens.refresh_token ? 'present' : 'MISSING — re-auth required');
     } catch (e) {
       console.error('FAILED to get token:', e.message);
       process.exit(1);
     }
-  });
+    return;
+  }
+
+  console.log('\nAuthorize this app by visiting this url:');
+  console.log(authUrl);
+  console.log('\nThen run with --code <code> to exchange it:');
+  console.log(`node steel-drive.mjs setup-oauth --clientId ${clientId} --clientSecret ${clientSecret} --code <CODE>`);
 }
 
 async function list(drive, runId, folderId) {

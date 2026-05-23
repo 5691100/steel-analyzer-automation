@@ -68,6 +68,15 @@ pm2 start agent-core/scripts/steel-orchestrator.mjs --name steel-orchestrator
 - OAuth tokens stored with `0700` directory and `0600` file permissions
 - No credentials committed to this repository
 
+## CI
+
+GitHub Actions runs on every PR and push to `main`:
+- Dependency install (`npm ci`)
+- Syntax check: `steel-drive.mjs`, `steel-orchestrator.mjs`
+- Secret pattern scan (high-confidence token values)
+- Webhook URL guard (rejects re-introduction of n8n upload webhook)
+- `npm audit` (informational)
+
 ## Slice 6 Changes (2026-05-23)
 
 - Removed: `UPLOAD_WEBHOOK_URL` (n8n upload webhook dead path)

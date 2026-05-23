@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.gepa-register.v1",
+  "title": "Steel GEPA Register",
+  "description": "Per-run register of GEPA proposals (RFI-pattern). Append-only. Run cannot close while any proposal is pending.",
+  "type": "object",
+  "required": ["schema", "run_id", "proposals", "updated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "steel.gepa-register.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "raised_by", "description", "raised_at", "owner_decision"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "raised_by": { "type": "string" },
+          "description": { "type": "string" },
+          "drawing_ref": { "type": "string" },
+          "standard_assumption": { "type": "string" },
+          "proposed_deviation": { "type": "string" },
+          "owner_decision": {
+            "type": "string",
+            "enum": ["pending", "approved", "rejected"]
+          },
+          "decided_by": { "type": "string" },
+          "decided_at": { "type": "string", "format": "date-time" },
+          "rationale": { "type": "string" },
+          "raised_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

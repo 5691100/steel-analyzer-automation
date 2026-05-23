@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.run-request.v1",
+  "title": "Steel Run Request",
+  "description": "Signal from operator to orchestrator requesting a new Steel Analyzer run.",
+  "type": "object",
+  "required": ["schema", "project_name", "delivery_mode", "requested_by", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "steel.run-request.v1"
+    },
+    "project_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "delivery_mode": {
+      "type": "string",
+      "enum": ["standard", "procurement-grade"]
+    },
+    "requested_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "drive_folder_id": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "not": {
+    "anyOf": [
+      { "required": ["targetDir"] },
+      { "required": ["credentials_path"] },
+      { "required": ["output_path"] }
+    ]
+  }
+}

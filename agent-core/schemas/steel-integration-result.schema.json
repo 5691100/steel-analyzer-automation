@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.integration-result.v1",
+  "title": "Steel Integration Result",
+  "description": "Signal from CodexClaw to orchestrator after integration and sign-off.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "integration_runtime",
+    "status",
+    "actions_taken",
+    "gepa_proposals",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "steel.integration-result.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "integration_runtime": {
+      "type": "string",
+      "enum": ["codexclaw"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "blocked", "needs-owner-decision"]
+    },
+    "actions_taken": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "gepa_proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

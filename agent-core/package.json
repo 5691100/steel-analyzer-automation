@@ -1,0 +1,13 @@
+{
+  "name": "steel-agent-core",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Steel Analyzer orchestration scripts — operational tooling only, no application runtime",
+  "private": true,
+  "scripts": {
+    "install:check": "node -e \"import('googleapis').then(() => console.log('googleapis OK')).catch(e => { console.error(e.message); process.exit(1); })\""
+  },
+  "dependencies": {
+    "googleapis": "^171.4.0"
+  }
+}

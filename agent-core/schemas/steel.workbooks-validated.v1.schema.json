@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.workbooks-validated.v1",
+  "title": "Steel Workbooks Validated",
+  "description": "Signal from GeminiClaw when workbook validation is complete.",
+  "type": "object",
+  "required": ["schema", "run_id", "status", "results", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "steel.workbooks-validated.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "fail"]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "valid"],
+        "additionalProperties": false,
+        "properties": {
+          "file": { "type": "string" },
+          "valid": { "type": "boolean" },
+          "error": { "type": "string" },
+          "sheet_count": { "type": "integer" },
+          "sheets": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

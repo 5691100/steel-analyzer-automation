@@ -1,0 +1,14 @@
+{"from":null,"to":"requested","signal":"steel.run-request.v1","ts":"2026-05-23T21:26:22.352Z"}
+{"from":"requested","to":"sources_manifested","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.037Z"}
+{"from":"sources_manifested","to":"sources_downloaded","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.038Z"}
+{"from":"sources_downloaded","to":"extraction_done","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.038Z"}
+{"from":"extraction_done","to":"workbooks_generated","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.038Z"}
+{"from":"workbooks_generated","to":"workbooks_validated","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.038Z"}
+{"from":"workbooks_validated","to":"producer_handoff_done","signal":"steel.run-complete.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.038Z"}
+{"from":"producer_handoff_done","to":"claude_review_requested","signal":"orchestrator-route","run_id":"slice-6-test","ts":"2026-05-23T21:27:11.039Z"}
+{"from":"claude_review_requested","to":"claude_review_passed","signal":"steel.review-result.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:18.466Z"}
+{"from":"claude_review_passed","to":"codex_integration_requested","signal":"orchestrator-route","run_id":"slice-6-test","ts":"2026-05-23T21:27:18.467Z"}
+{"from":"codex_integration_requested","to":"codex_integration_done","signal":"steel.integration-result.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:35.300Z"}
+{"from":"codex_integration_done","to":"upload_ready","signal":"steel.integration-result.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:35.300Z"}
+{"from":"upload_ready","to":"uploaded_verified","signal":"steel.upload-verified.v1","run_id":"slice-6-test","ts":"2026-05-23T21:27:45.453Z"}
+{"from":"uploaded_verified","to":"closed","signal":"auto-close","run_id":"slice-6-test","ts":"2026-05-23T21:27:45.454Z"}

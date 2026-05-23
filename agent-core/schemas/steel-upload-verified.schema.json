@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.upload-verified.v1",
+  "title": "Steel Upload Verified",
+  "description": "Signal written after Drive upload + download-back MD5 verification.",
+  "type": "object",
+  "required": [
+    "schema", "run_id", "uploaded_by",
+    "local_path", "local_md5",
+    "drive_file_id", "drive_md5",
+    "verification_status", "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "string", "const": "steel.upload-verified.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "uploaded_by": { "type": "string" },
+    "local_path": { "type": "string" },
+    "local_md5": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "drive_file_id": { "type": "string" },
+    "drive_md5": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "web_view_link": { "type": "string" },
+    "verification_status": {
+      "type": "string",
+      "enum": ["verified", "md5_mismatch", "download_failed"]
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

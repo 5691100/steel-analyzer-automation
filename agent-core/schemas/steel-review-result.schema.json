@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.review-result.v1",
+  "title": "Steel Review Result",
+  "description": "Signal from ClaudeClaw to orchestrator after QA review.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "review_runtime",
+    "verdict",
+    "stage_results",
+    "issues",
+    "gepa_triggered",
+    "gepa_count",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "steel.review-result.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "review_runtime": {
+      "type": "string",
+      "enum": ["claudeclaw"]
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "BLOCKED"]
+    },
+    "stage_results": {
+      "type": "object",
+      "properties": {
+        "stage1_workbook": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "NOT_RUN"]
+        },
+        "stage2_arithmetic": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "NOT_RUN"]
+        },
+        "stage3_domain": {
+          "type": "string",
+          "enum": ["PASS", "BLOCKED", "NOT_RUN"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "description"],
+        "properties": {
+          "stage": { "type": "string" },
+          "description": { "type": "string" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "gepa_triggered": {
+      "type": "boolean"
+    },
+    "gepa_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

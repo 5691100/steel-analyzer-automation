@@ -68,6 +68,14 @@ pm2 start agent-core/scripts/steel-orchestrator.mjs --name steel-orchestrator
 - OAuth tokens stored with `0700` directory and `0600` file permissions
 - No credentials committed to this repository
 
+## Operator Runbook
+
+See [docs/production-dry-run.md](docs/production-dry-run.md) for:
+- OAuth setup (one-time, non-interactive via `--code`)
+- Drive folder listing and download dry-run
+- PASS/FAIL criteria and manifest locations
+- Upload approval gate
+
 ## CI
 
 GitHub Actions runs on every PR and push to `main`:

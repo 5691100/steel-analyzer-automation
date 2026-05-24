@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steel Analyzer — Run Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; }
+button, table { font: inherit; }
+button { cursor: pointer; }
+.shell { max-width: 1440px; margin: 0 auto; padding: 24px; }
+.topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid #1e2d45; }
+.title-block { min-width: 0; }
+h1 { margin: 0; color: #e6edf3; font-size: 24px; line-height: 1.2; font-weight: 700; }
+.subtitle { margin-top: 6px; color: #8b949e; font-size: 13px; }
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.button { min-height: 34px; border: 1px solid #2a3a56; border-radius: 6px; padding: 7px 12px; background: #161b27; color: #dce5ee; }
+.button:hover { border-color: #38bdf8; color: #f0f6fc; }
+.grid-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
+.kpi { min-width: 0; padding: 14px; border: 1px solid #1e2d45; border-top: 3px solid #38bdf8; border-radius: 8px; background: #161b27; }
+.kpi:nth-child(2) { border-top-color: #4ade80; }
+.kpi:nth-child(3) { border-top-color: #818cf8; }
+.kpi:nth-child(4) { border-top-color: #fbbf24; }
+.kpi:nth-child(5) { border-top-color: #f87171; }
+.kpi:nth-child(6) { border-top-color: #94a3b8; }
+.kpi-label { overflow: hidden; color: #8b949e; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.kpi-value { overflow-wrap: anywhere; margin-top: 8px; color: #e6edf3; font-size: 21px; line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi-sub { overflow-wrap: anywhere; margin-top: 5px; color: #8b949e; font-size: 12px; }
+.panel { margin-bottom: 22px; padding: 18px; border: 1px solid #1e2d45; border-radius: 8px; background: #161b27; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.panel-title { margin: 0; color: #8b949e; font-size: 12px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; }
+.panel-note { color: #8b949e; font-size: 12px; }
+.two-col { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr); gap: 18px; }
+.chart-frame { position: relative; height: 310px; min-height: 310px; }
+.donut-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: center; }
+.donut-frame { position: relative; width: 220px; height: 220px; }
+.legend { display: grid; gap: 10px; }
+.legend-row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 9px; align-items: center; color: #c9d1d9; font-size: 13px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.legend-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-value { color: #8b949e; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; border: 1px solid #1e2d45; border-radius: 8px; }
+table { width: 100%; min-width: 760px; border-collapse: collapse; }
+th { position: relative; padding: 10px 12px; border-bottom: 1px solid #1e2d45; background: #0d1117; color: #8b949e; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-align: left; text-transform: uppercase; white-space: nowrap; user-select: none; }
+th.sortable { cursor: pointer; }
+th.sortable:hover { color: #e6edf3; }
+th.sorted-asc::after { content: " ↑"; color: #38bdf8; }
+th.sorted-desc::after { content: " ↓"; color: #38bdf8; }
+td { padding: 10px 12px; border-bottom: 1px solid #1a2236; color: #c9d1d9; vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover td { background: #1a2236; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: #8b949e; }
+.badge { display: inline-flex; align-items: center; max-width: 100%; min-height: 23px; padding: 2px 8px; border: 1px solid #2a3a56; border-radius: 999px; background: #212938; color: #dce5ee; font-size: 12px; font-weight: 700; text-transform: capitalize; }
+.badge-complete, .badge-success { border-color: rgba(74,222,128,0.35); background: rgba(74,222,128,0.12); color: #4ade80; }
+.badge-failed, .badge-error { border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.12); color: #f87171; }
+.badge-partial, .badge-running { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: #fbbf24; }
+.state { padding: 28px; border: 1px solid #1e2d45; border-radius: 8px; background: #161b27; color: #8b949e; }
+.state strong { display: block; margin-bottom: 6px; color: #e6edf3; font-size: 16px; }
+.error-panel { padding: 18px; border: 1px solid rgba(248,113,113,0.35); border-radius: 8px; background: rgba(248,113,113,0.08); color: #fda4af; }
+.error-panel strong { display: block; margin-bottom: 6px; color: #fecdd3; }
+.footer { display: flex; justify-content: space-between; gap: 18px; padding-top: 16px; border-top: 1px solid #1e2d45; color: #8b949e; font-size: 12px; }
+@media (max-width: 1100px) {
+  .grid-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .two-col { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .shell { padding: 16px; }
+  .topbar { display: block; }
+  .actions { justify-content: flex-start; margin-top: 14px; }
+  .grid-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .donut-layout { grid-template-columns: 1fr; }
+  .donut-frame { margin: 0 auto; }
+  .footer { display: block; }
+}
+@media (max-width: 460px) {
+  .grid-kpis { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="title-block">
+      <h1 id="pageTitle">Steel Analyzer — Run History</h1>
+      <div id="pageSubtitle" class="subtitle">Published pipeline runs</div>
+    </div>
+    <div id="pageActions" class="actions"></div>
+  </header>
+  <main id="app" aria-live="polite"></main>
+  <footer class="footer">
+    <span>Steel Analyzer dashboard</span>
+    <span>Static Vercel app · run data loaded from dashboard/runs</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const RUN_ID_RE = /^[a-zA-Z0-9_-]{1,80}$/;
+  const chartPalette = ['#38bdf8', '#4ade80', '#818cf8', '#fbbf24', '#fb923c', '#f87171', '#94a3b8', '#22d3ee'];
+  const app = document.getElementById('app');
+  const title = document.getElementById('pageTitle');
+  const subtitle = document.getElementById('pageSubtitle');
+  const actions = document.getElementById('pageActions');
+  let activeCharts = [];
+  let indexSort = { key: 'created_at', dir: 'desc' };
+  let profileSort = { key: 'weight_kg', dir: 'desc' };
+
+  function clearNode(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.setAttribute('class', className);
+    if (text !== undefined) node.textContent = String(text);
+    return node;
+  }
+
+  function append(parent, children) {
+    children.forEach((child) => parent.appendChild(child));
+    return parent;
+  }
+
+  function setHeader(mainTitle, subText) {
+    title.textContent = mainTitle;
+    subtitle.textContent = subText;
+    clearNode(actions);
+  }
+
+  function resetView() {
+    activeCharts.forEach((chart) => chart.destroy());
+    activeCharts = [];
+    clearNode(app);
+  }
+
+  function safeText(value, fallback = '—') {
+    if (value === null || value === undefined || value === '') return fallback;
+    return String(value).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 160);
+  }
+
+  function safeLabel(value, fallback = 'Unknown') {
+    return safeText(value, fallback).replace(/[<>]/g, '').slice(0, 80);
+  }
+
+  function normalizeStatus(value) {
+    return safeLabel(value || 'unknown', 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 40) || 'unknown';
+  }
+
+  function asArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function asNumber(value) {
+    const number = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function firstValue(values, fallback) {
+    for (const value of values) {
+      if (value !== null && value !== undefined && value !== '') return value;
+    }
+    return fallback;
+  }
+
+  function formatNumber(value, digits = 0) {
+    const number = asNumber(value);
+    return number.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  }
+
+  function formatMaybeNumber(value, digits = 0) {
+    if (value === null || value === undefined || value === '') return '—';
+    return formatNumber(value, digits);
+  }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return safeText(value);
+    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function statusBadge(status) {
+    const normalized = normalizeStatus(status);
+    const badge = el('span', `badge badge-${normalized}`);
+    badge.textContent = normalized;
+    return badge;
+  }
+
+  function loadingState(message) {
+    resetView();
+    app.appendChild(append(el('div', 'state'), [el('strong', null, 'Loading'), el('span', null, message)]));
+  }
+
+  function emptyState(heading, message) {
+    resetView();
+    app.appendChild(append(el('div', 'state'), [el('strong', null, heading), el('span', null, message)]));
+  }
+
+  function errorState(heading, message) {
+    resetView();
+    app.appendChild(append(el('div', 'error-panel'), [el('strong', null, heading), el('span', null, message)]));
+  }
+
+  async function fetchJson(path) {
+    const response = await fetch(path, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+
+  function getSubprojects(payload) {
+    return asArray(firstValue([
+      payload.subprojects,
+      payload.analysis && payload.analysis.subprojects,
+      payload.data && payload.data.subprojects,
+      payload.result && payload.result.subprojects
+    ], []));
+  }
+
+  function totalFromSubprojects(subprojects, key) {
+    return subprojects.reduce((sum, sp) => {
+      const direct = sp && sp.totals ? asNumber(sp.totals[key]) : 0;
+      if (direct) return sum + direct;
+      return sum + asArray(sp && sp.profiles).reduce((profileSum, profile) => profileSum + asNumber(profile && profile[key]), 0);
+    }, 0);
+  }
+
+  function normalizeRun(payload) {
+    const raw = payload && typeof payload === 'object' ? payload : {};
+    const subprojects = getSubprojects(raw);
+    const totals = raw.totals || (raw.summary && raw.summary.totals) || {};
+    const weight = asNumber(firstValue([totals.weight_kg, totals.weightKg, raw.weight_kg], totalFromSubprojects(subprojects, 'weight_kg')));
+    const paint = asNumber(firstValue([totals.paint_m2, totals.paintM2, raw.paint_m2], totalFromSubprojects(subprojects, 'paint_m2')));
+    const outputs = asArray(raw.outputs || (raw.result && raw.result.outputs));
+    return {
+      raw,
+      runId: safeText(firstValue([raw.run_id, raw.runId, raw.id], 'unknown')),
+      project: safeText(firstValue([raw.project_name, raw.project, raw.projectName], 'Unknown project')),
+      status: normalizeStatus(firstValue([raw.status, raw.state], 'unknown')),
+      createdAt: firstValue([raw.created_at, raw.createdAt, raw.date, raw.timestamp], ''),
+      totals: { weight_kg: weight, paint_m2: paint },
+      subprojectCount: asNumber(firstValue([raw.subproject_count, raw.subprojectCount], subprojects.length)),
+      subprojects,
+      outputs,
+      error: safeText(firstValue([raw.error, raw.message, raw.reason], 'Run failed before complete dashboard data was published.'))
+    };
+  }
+
+  function normalizeIndexRow(row) {
+    const run = normalizeRun(row);
+    return {
+      run_id: run.runId,
+      project_name: run.project,
+      created_at: run.createdAt,
+      weight_kg: run.totals.weight_kg,
+      paint_m2: run.totals.paint_m2,
+      status: run.status
+    };
+  }
+
+  function sortRows(rows, sortState) {
+    return [...rows].sort((a, b) => {
+      const left = a[sortState.key];
+      const right = b[sortState.key];
+      const direction = sortState.dir === 'asc' ? 1 : -1;
+      if (typeof left === 'number' || typeof right === 'number') return (asNumber(left) - asNumber(right)) * direction;
+      return String(left || '').localeCompare(String(right || ''), undefined, { numeric: true, sensitivity: 'base' }) * direction;
+    });
+  }
+
+  function toggleSort(current, key) {
+    return current.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
+  }
+
+  function makeSortableHeader(label, key, sortState, onClick, numeric = false) {
+    const th = el('th', 'sortable');
+    if (numeric) th.classList.add('num');
+    th.textContent = label;
+    th.setAttribute('scope', 'col');
+    th.setAttribute('role', 'button');
+    th.setAttribute('tabindex', '0');
+    if (sortState.key === key) th.classList.add(sortState.dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+    const activate = () => onClick(key);
+    th.addEventListener('click', activate);
+    th.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate();
+      }
+    });
+    return th;
+  }
+
+  function renderTable(columns, rows, sortState, onSort, rowClick) {
+    const wrap = el('div', 'table-wrap');
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    columns.forEach((column) => {
+      headerRow.appendChild(makeSortableHeader(column.label, column.key, sortState, onSort, column.numeric));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    rows.forEach((row) => {
+      const tr = document.createElement('tr');
+      if (rowClick) {
+        tr.setAttribute('class', 'clickable');
+        tr.setAttribute('tabindex', '0');
+        tr.addEventListener('click', () => rowClick(row));
+        tr.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') rowClick(row);
+        });
+      }
+      columns.forEach((column) => {
+        const td = document.createElement('td');
+        if (column.numeric) td.setAttribute('class', 'num');
+        if (column.render) {
+          td.appendChild(column.render(row));
+        } else {
+          td.textContent = column.format ? column.format(row[column.key]) : safeText(row[column.key]);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  async function renderIndex() {
+    setHeader('Steel Analyzer — Run History', 'Published pipeline runs');
+    loadingState('Loading run index');
+    try {
+      const data = await fetchJson('./runs/index.json');
+      const rows = asArray(data).map(normalizeIndexRow).filter((row) => row.run_id !== 'unknown');
+      resetView();
+      if (rows.length === 0) {
+        app.appendChild(append(el('div', 'state'), [el('strong', null, 'No runs yet'), el('span', null, 'Published run data will appear here after the first pipeline publish.')]));
+        return;
+      }
+      const panel = el('section', 'panel');
+      const head = el('div', 'panel-head');
+      append(head, [el('h2', 'panel-title', 'Runs'), el('span', 'panel-note', `${rows.length} total`)]);
+      panel.appendChild(head);
+      const sortedRows = sortRows(rows, indexSort);
+      const table = renderTable([
+        { label: 'Run ID', key: 'run_id' },
+        { label: 'Project', key: 'project_name' },
+        { label: 'Date', key: 'created_at', format: formatDate },
+        { label: 'Weight kg', key: 'weight_kg', numeric: true, format: (value) => formatMaybeNumber(value, 0) },
+        { label: 'Paint m²', key: 'paint_m2', numeric: true, format: (value) => formatMaybeNumber(value, 1) },
+        { label: 'Status', key: 'status', render: (row) => statusBadge(row.status) }
+      ], sortedRows, indexSort, (key) => {
+        indexSort = toggleSort(indexSort, key);
+        renderIndex();
+      }, (row) => {
+        window.location.hash = `#/run/${encodeURIComponent(row.run_id)}`;
+      });
+      panel.appendChild(table);
+      app.appendChild(panel);
+    } catch (error) {
+      errorState('Dashboard data unavailable', 'Run index could not be loaded.');
+    }
+  }
+
+  function makeKpi(label, value, subText) {
+    return append(el('div', 'kpi'), [el('div', 'kpi-label', label), el('div', 'kpi-value', value), el('div', 'kpi-sub', subText)]);
+  }
+
+  function getCategoryRows(subprojects) {
+    const names = new Set();
+    const bySubproject = subprojects.map((sp) => {
+      const rows = asArray(sp && sp.categories);
+      const categories = rows.length > 0 ? rows : [{
+        name: 'Uncategorized',
+        weight_kg: sp && sp.totals ? asNumber(sp.totals.weight_kg) : totalFromSubprojects([sp], 'weight_kg'),
+        paint_m2: sp && sp.totals ? asNumber(sp.totals.paint_m2) : totalFromSubprojects([sp], 'paint_m2')
+      }];
+      const map = new Map();
+      categories.forEach((category) => {
+        const name = safeLabel(category && category.name, 'Uncategorized');
+        names.add(name);
+        map.set(name, { weight_kg: asNumber(category && category.weight_kg), paint_m2: asNumber(category && category.paint_m2) });
+      });
+      return { name: safeLabel(sp && sp.name, 'Subproject'), map };
+    });
+    return { labels: [...names], bySubproject };
+  }
+
+  function getProfileRows(subprojects) {
+    const aggregate = new Map();
+    subprojects.forEach((sp) => {
+      asArray(sp && sp.profiles).forEach((profile) => {
+        const profileName = safeLabel(profile && profile.profile, 'Unknown profile');
+        const grade = safeLabel(firstValue([profile && profile.steel_grade, profile && profile.grade], '—'), '—');
+        const key = `${profileName}\u0001${grade}`;
+        const current = aggregate.get(key) || { profile: profileName, grade, qty: 0, length_m: 0, weight_kg: 0, paint_m2: 0 };
+        current.qty += asNumber(profile && profile.qty);
+        current.length_m += asNumber(profile && profile.length_m);
+        current.weight_kg += asNumber(profile && profile.weight_kg);
+        current.paint_m2 += asNumber(profile && profile.paint_m2);
+        aggregate.set(key, current);
+      });
+    });
+    return [...aggregate.values()];
+  }
+
+  function renderKpis(run) {
+    const grid = el('section', 'grid-kpis');
+    append(grid, [
+      makeKpi('Weight', formatNumber(run.totals.weight_kg, 0), 'kg total procurement'),
+      makeKpi('Paint', formatNumber(run.totals.paint_m2, 1), 'm² total paint area'),
+      makeKpi('Subprojects', formatNumber(run.subprojectCount, 0), 'published in run data'),
+      makeKpi('Status', run.status || 'unknown', 'pipeline state'),
+      makeKpi('Date', formatDate(run.createdAt), 'created_at'),
+      makeKpi('Outputs count', formatNumber(run.outputs.length, 0), 'published artifacts')
+    ]);
+    app.appendChild(grid);
+  }
+
+  function createChart(canvas, config) {
+    if (!window.Chart) {
+      const fallback = el('div', 'state');
+      append(fallback, [el('strong', null, 'Chart unavailable'), el('span', null, 'Chart.js did not load.')]);
+      canvas.replaceWith(fallback);
+      return;
+    }
+    activeCharts.push(new Chart(canvas, config));
+  }
+
+  function renderCharts(run) {
+    const categoryData = getCategoryRows(run.subprojects);
+    const profileRows = getProfileRows(run.subprojects);
+    if (categoryData.labels.length === 0 || run.subprojects.length === 0) {
+      app.appendChild(append(el('div', 'state'), [el('strong', null, 'No chart data'), el('span', null, 'This run has no subproject category data.')]));
+      return;
+    }
+
+    const layout = el('section', 'two-col');
+    const weightPanel = el('div', 'panel');
+    weightPanel.appendChild(append(el('div', 'panel-head'), [el('h2', 'panel-title', 'Weight by Subproject × Category'), el('span', 'panel-note', 'kg')]));
+    const weightFrame = el('div', 'chart-frame');
+    const weightCanvas = document.createElement('canvas');
+    weightFrame.appendChild(weightCanvas);
+    weightPanel.appendChild(weightFrame);
+
+    const donutPanel = el('div', 'panel');
+    donutPanel.appendChild(append(el('div', 'panel-head'), [el('h2', 'panel-title', 'Procurement Split'), el('span', 'panel-note', 'kg')]));
+    const donutLayout = el('div', 'donut-layout');
+    const donutFrame = el('div', 'donut-frame');
+    const donutCanvas = document.createElement('canvas');
+    donutFrame.appendChild(donutCanvas);
+    const legend = el('div', 'legend');
+    run.subprojects.forEach((sp, index) => {
+      const row = el('div', 'legend-row');
+      const dot = el('span', 'legend-dot');
+      dot.style.backgroundColor = chartPalette[index % chartPalette.length];
+      const name = el('span', 'legend-name', safeLabel(sp && sp.name, 'Subproject'));
+      const value = el('span', 'legend-value', `${formatNumber(sp && sp.totals ? sp.totals.weight_kg : totalFromSubprojects([sp], 'weight_kg'), 0)} kg`);
+      append(row, [dot, name, value]);
+      legend.appendChild(row);
+    });
+    append(donutLayout, [donutFrame, legend]);
+    donutPanel.appendChild(donutLayout);
+
+    append(layout, [weightPanel, donutPanel]);
+    app.appendChild(layout);
+
+    createChart(weightCanvas, {
+      type: 'bar',
+      data: {
+        labels: categoryData.labels.map((label) => safeLabel(label)),
+        datasets: categoryData.bySubproject.map((entry, index) => ({
+          label: safeLabel(entry.name),
+          data: categoryData.labels.map((label) => entry.map.get(label) ? entry.map.get(label).weight_kg : 0),
+          backgroundColor: chartPalette[index % chartPalette.length],
+          stack: 'weight'
+        }))
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#c9d1d9' } } },
+        scales: {
+          x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#1a2236' } },
+          y: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#1a2236' } }
+        }
+      }
+    });
+
+    createChart(donutCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: run.subprojects.map((sp) => safeLabel(sp && sp.name, 'Subproject')),
+        datasets: [{
+          data: run.subprojects.map((sp) => sp && sp.totals ? asNumber(sp.totals.weight_kg) : totalFromSubprojects([sp], 'weight_kg')),
+          backgroundColor: run.subprojects.map((sp, index) => chartPalette[index % chartPalette.length]),
+          borderColor: '#161b27',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        cutout: '62%'
+      }
+    });
+
+    if (profileRows.length === 0) {
+      app.appendChild(append(el('div', 'state'), [el('strong', null, 'No profile rows'), el('span', null, 'This run has no profile table data.')]));
+    }
+  }
+
+  function renderProfiles(run) {
+    const rows = sortRows(getProfileRows(run.subprojects), profileSort);
+    const panel = el('section', 'panel');
+    panel.appendChild(append(el('div', 'panel-head'), [el('h2', 'panel-title', 'Profiles'), el('span', 'panel-note', `${rows.length} rows`)]));
+    if (rows.length === 0) {
+      panel.appendChild(append(el('div', 'state'), [el('strong', null, 'No profiles'), el('span', null, 'Profile rows are missing from this run payload.')]));
+      app.appendChild(panel);
+      return;
+    }
+    panel.appendChild(renderTable([
+      { label: 'Profile', key: 'profile' },
+      { label: 'Grade', key: 'grade' },
+      { label: 'Qty', key: 'qty', numeric: true, format: (value) => formatMaybeNumber(value, 0) },
+      { label: 'Length m', key: 'length_m', numeric: true, format: (value) => formatMaybeNumber(value, 1) },
+      { label: 'Weight kg', key: 'weight_kg', numeric: true, format: (value) => formatMaybeNumber(value, 0) },
+      { label: 'Paint m²', key: 'paint_m2', numeric: true, format: (value) => formatMaybeNumber(value, 1) }
+    ], rows, profileSort, (key) => {
+      profileSort = toggleSort(profileSort, key);
+      renderDetail(run.runId);
+    }));
+    app.appendChild(panel);
+  }
+
+  function renderFailedRun(run) {
+    const panel = el('section', 'error-panel');
+    append(panel, [
+      el('strong', null, 'Run failed'),
+      el('span', null, run.error)
+    ]);
+    app.appendChild(panel);
+  }
+
+  async function renderDetail(runId) {
+    const decoded = decodeURIComponent(runId || '');
+    if (!RUN_ID_RE.test(decoded)) {
+      setHeader('Steel Analyzer — Run Detail', 'Invalid run identifier');
+      errorState('Invalid run ID', 'Run IDs may only contain letters, numbers, underscores, and hyphens.');
+      return;
+    }
+
+    setHeader('Steel Analyzer — Run Detail', decoded);
+    const back = el('button', 'button', 'Back to runs');
+    back.setAttribute('type', 'button');
+    back.addEventListener('click', () => {
+      window.location.hash = '#/';
+    });
+    actions.appendChild(back);
+    loadingState('Loading run data');
+
+    try {
+      const payload = await fetchJson(`./runs/${decoded}.json`);
+      const run = normalizeRun(payload);
+      run.runId = decoded;
+      setHeader(safeText(run.project), `Run ${decoded} · ${formatDate(run.createdAt)}`);
+      actions.appendChild(back);
+      resetView();
+      renderKpis(run);
+      if (run.status === 'failed') {
+        renderFailedRun(run);
+      } else {
+        renderCharts(run);
+        renderProfiles(run);
+      }
+    } catch (error) {
+      errorState('Run data unavailable', 'The run may still be uploading, or the data was not published.');
+    }
+  }
+
+  function route() {
+    const hash = window.location.hash || '#/';
+    if (hash === '#' || hash === '#/' || hash === '') {
+      renderIndex();
+      return;
+    }
+    if (hash.startsWith('#/run/')) {
+      renderDetail(hash.slice('#/run/'.length));
+      return;
+    }
+    setHeader('Steel Analyzer — Run History', 'Unknown dashboard route');
+    errorState('Route not found', 'Use the run history or a valid run detail URL.');
+  }
+
+  window.addEventListener('hashchange', route);
+  window.addEventListener('DOMContentLoaded', route);
+})();
+</script>
+</body>
+</html>

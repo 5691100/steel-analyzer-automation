@@ -38,6 +38,23 @@ function dirname() {
   return fileURLToPath(new URL(".", import.meta.url));
 }
 
+const RUN_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+function isValidRunId(runId) {
+  return Boolean(runId && RUN_ID_PATTERN.test(runId));
+}
+
+function invalidRunIdMessage(runId) {
+  return `Invalid run_id: ${runId || "(empty)"}. Allowed characters: letters, numbers, dot, underscore, hyphen.`;
+}
+
+function validateRunId(runId) {
+  if (!isValidRunId(runId)) {
+    console.error(invalidRunIdMessage(runId));
+    process.exit(1);
+  }
+}
+
 // ── Ledger helpers ─────────────────────────────────────────────────────────
 
 function ledgerPath(runId) {
@@ -250,7 +267,7 @@ function notify(runId, event, runData) {
       `Project: ${project}`,
       `Delivery: <b>${mode}</b> — manual gate`,
       ``,
-      `Approve: <code>node steel-orchestrator.mjs upload-approve ${runId}</code>`,
+      `Approve: <code>node steel-orchestrator.mjs upload-approve ${runId} --owner-approval "I_APPROVE_STEEL_UPLOAD:${runId}:&lt;folder_id&gt;"</code>`,
     ].join("\n"),
 
     upload_ready_standard: [
@@ -258,8 +275,8 @@ function notify(runId, event, runData) {
       `Run: <code>${runId}</code>`,
       `Project: ${project}`,
       ``,
-      `Trigger: <code>node steel-orchestrator.mjs upload-approve ${runId}</code>`,
-      `(Requires STEEL_DRIVE_CREDS or GWS_AUTH_PATH to be set)`,
+      `Trigger: <code>node steel-orchestrator.mjs upload-approve ${runId} --owner-approval "I_APPROVE_STEEL_UPLOAD:${runId}:&lt;folder_id&gt;"</code>`,
+      `(Writes are User OAuth only — no service-account fallback.)`,
     ].join("\n"),
 
     closed: [
@@ -397,6 +414,10 @@ async function processSignal(signalPath) {
   // New run creation
   if (schemaId === "steel.run-request.v1") {
     const runId = signal.run_id || randomUUID().replace(/-/g, "").slice(0, 12);
+    if (!isValidRunId(runId)) {
+      moveToDeadLetter(signalPath, invalidRunIdMessage(runId));
+      return;
+    }
     // KI-7: defense-in-depth — reject if ledger already exists
     const existingLedger = join(RUNS, runId, "ledger.jsonl");
     if (existsSync(existingLedger)) {
@@ -423,6 +444,10 @@ async function processSignal(signalPath) {
   const runId = signal.run_id;
   if (!runId) {
     moveToDeadLetter(signalPath, "Missing 'run_id' field");
+    return;
+  }
+  if (!isValidRunId(runId)) {
+    moveToDeadLetter(signalPath, invalidRunIdMessage(runId));
     return;
   }
 
@@ -606,6 +631,7 @@ function initCommand(args) {
   }
   // KI-7: reject if run already exists
   if (runId) {
+    validateRunId(runId);
     const ledgerFile = join(RUNS, runId, "ledger.jsonl");
     if (existsSync(ledgerFile)) {
       console.error(`Run ${runId} already exists. Use a new run_id or check status with: node steel-orchestrator.mjs status`);
@@ -638,6 +664,7 @@ function gepaApproveCommand(args) {
     console.error("Usage: steel-orchestrator.mjs gepa-approve <run_id> <proposal_id> [rationale]");
     process.exit(1);
   }
+  validateRunId(runId);
   const rationale = rationaleParts.join(" ") || "Approved by owner";
   recordDecision(runId, proposalId, "approved", "owner", rationale);
   console.log(`GEPA proposal ${proposalId} approved for run ${runId}`);
@@ -662,18 +689,28 @@ function gepaApproveCommand(args) {
 // ── upload-approve command ─────────────────────────────────────────────────
 
 function uploadApproveCommand(args) {
-  const [runId] = args;
+  // Parse positional runId plus --owner-approval flag.
+  let runId = null;
+  let ownerApproval = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--owner-approval") {
+      ownerApproval = args[++i] ?? null;
+    } else if (a.startsWith("--owner-approval=")) {
+      ownerApproval = a.slice("--owner-approval=".length);
+    } else if (!runId && !a.startsWith("--")) {
+      runId = a;
+    }
+  }
   if (!runId) {
-    console.error("Usage: steel-orchestrator.mjs upload-approve <run_id>");
+    console.error('Usage: steel-orchestrator.mjs upload-approve <run_id> --owner-approval "I_APPROVE_STEEL_UPLOAD:<run_id>:<folder_id>"');
     process.exit(1);
   }
+  validateRunId(runId);
 
-  // Credentials must be resolvable before any Drive call
-  const credsEnv = process.env.STEEL_DRIVE_CREDS || process.env.GWS_AUTH_PATH;
-  if (!credsEnv) {
-    console.error("STEEL_DRIVE_CREDS (or GWS_AUTH_PATH) env var must be set for upload-approve");
-    process.exit(1);
-  }
+  // Writes are User OAuth only. The legacy STEEL_DRIVE_CREDS / GWS_AUTH_PATH env
+  // gate is intentionally removed here so a misconfigured service-account key
+  // can never be used for write operations.
 
   // Run must exist
   const lf = ledgerPath(runId);
@@ -726,6 +763,24 @@ function uploadApproveCommand(args) {
   // Upload each output file via steel-drive.mjs
   const steelDrivePath = join(dirname(), "steel-drive.mjs");
   const uploadedFiles = [];
+  const uploadManifestPath = join(RUNS, runId, "manifest-drive-upload.json");
+
+  function runSteelDriveUpload(filePath) {
+    const childEnv = { ...process.env };
+    delete childEnv.STEEL_DRIVE_CREDS;
+    delete childEnv.GWS_AUTH_PATH;
+    delete childEnv.GOOGLE_APPLICATION_CREDENTIALS;
+    const uploadArgs = [
+      steelDrivePath, "upload",
+      "--run", runId,
+      "--folder", driveFolderId,
+      "--file", filePath,
+    ];
+    if (ownerApproval) {
+      uploadArgs.push("--owner-approval", ownerApproval);
+    }
+    return spawnSync("node", uploadArgs, { stdio: "inherit", env: childEnv });
+  }
 
   for (const filePath of outputFiles) {
     if (!existsSync(filePath)) {
@@ -734,15 +789,18 @@ function uploadApproveCommand(args) {
       notify(runId, "dead_letter", { ...runData, dead_letter_reason: `upload-approve: file not found: ${filePath}` });
       process.exit(1);
     }
+    if (!ownerApproval) {
+      console.error(`ERROR: --owner-approval is required. Writes are User OAuth only — no service-account fallback.`);
+      console.error(`  Expected format: --owner-approval "I_APPROVE_STEEL_UPLOAD:${runId}:${driveFolderId}"`);
+      const result = runSteelDriveUpload(filePath);
+      process.exit(result.status || 2);
+    }
     console.log(`Uploading ${filePath}...`);
-    const result = spawnSync("node", [steelDrivePath, "upload", "--run", runId, "--folder", driveFolderId, "--file", filePath], {
-      stdio: "inherit",
-      env: process.env,
-    });
+    const result = runSteelDriveUpload(filePath);
     if (result.status !== 0) {
       console.error(`Upload failed for ${filePath} (exit ${result.status})`);
       const runData = readRunJson(runId);
-      notify(runId, "dead_letter", { ...runData, dead_letter_reason: `upload-approve: Drive upload failed for ${basename(filePath)}` });
+      notify(runId, "dead_letter", { ...runData, dead_letter_reason: `upload-approve: Drive upload failed for ${basename(filePath)} (exit ${result.status})` });
       process.exit(1);
     }
     uploadedFiles.push(filePath);
@@ -757,6 +815,7 @@ function uploadApproveCommand(args) {
     verification_status: "verified",
     uploaded_files: uploadedFiles,
     drive_folder_id: driveFolderId,
+    upload_manifest_path: uploadManifestPath,
     created_at: new Date().toISOString(),
   });
   console.log(`Upload verified — steel.upload-verified.v1 written`);

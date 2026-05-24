@@ -8,6 +8,9 @@
  *
  * Updated: 2026-05-23 - User OAuth support (Slice 6).
  * Upload uses User OAuth only — no Service Account fallback.
+ * Updated: 2026-05-24 - Owner-gated upload rehearsal (Sprint 7).
+ * Upload requires explicit --owner-approval token scoped to run_id and folder_id.
+ * Writes manifest-drive-upload.json for both blocked/skipped and executed uploads.
  */
 
 import { google } from 'googleapis';
@@ -105,9 +108,10 @@ async function getUploadDriveClient(cmdArgs) {
   // Upload MUST use User OAuth only — no Service Account fallback
   const oauthClient = await getOAuthClient();
   if (!oauthClient) {
-    console.error('ERROR: Upload requires User OAuth token. Run: node steel-drive.mjs setup-oauth');
-    console.error(`       Token path: ${OAUTH_TOKEN_PATH}`);
-    process.exit(1);
+    const err = new Error('Upload requires User OAuth token. Run: node steel-drive.mjs setup-oauth');
+    err.reason = 'oauth_missing';
+    err.tokenPath = OAUTH_TOKEN_PATH;
+    throw err;
   }
   return google.drive({ version: 'v3', auth: oauthClient });
 }
@@ -249,60 +253,476 @@ async function download(drive, runId, folderId) {
   console.log(`Manifest written to ${manifestPath}`);
 }
 
-async function upload(drive, runId, folderId, localPath) {
-  if (!folderId || !localPath) throw new Error('--folder and --file are required for upload');
+// ── Owner approval & path containment (Sprint 7) ─────────────────────────────
 
-  // Enforce run-scoped upload: file must be inside agent-core/steel-bus/runs/<runId>/
-  const allowedDir = path.resolve(process.cwd(), 'agent-core', 'steel-bus', 'runs', runId);
+export const APPROVAL_PREFIX = 'I_APPROVE_STEEL_UPLOAD';
+export const RUN_ID_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+export function validateRunId(runId) {
+  if (!runId || !RUN_ID_PATTERN.test(runId)) {
+    throw new Error(`Invalid run_id: ${runId || '(empty)'}. Allowed characters: letters, numbers, dot, underscore, hyphen.`);
+  }
+  return runId;
+}
+
+export function expectedApprovalToken(runId, folderId) {
+  return `${APPROVAL_PREFIX}:${runId}:${folderId}`;
+}
+
+export function checkOwnerApproval(token, runId, folderId) {
+  if (!token) return { ok: false, reason: 'missing_owner_approval' };
+  const expected = expectedApprovalToken(runId, folderId);
+  if (token !== expected) return { ok: false, reason: 'wrong_owner_approval' };
+  return { ok: true };
+}
+
+export function allowedRunDir(runId) {
+  validateRunId(runId);
+  const candidate = path.resolve(RUNS_DIR, runId);
+  const rel = path.relative(RUNS_DIR, candidate);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Invalid run_id for Drive upload path containment: ${runId}`);
+  }
+  return candidate;
+}
+
+function isRunDirSymlink(runDirAbs) {
+  try {
+    return fs.lstatSync(runDirAbs).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+// Resist symlink escapes: the run anchor itself must be a real directory under
+// the real RUNS_DIR, then the target must resolve under that trusted anchor.
+export function pathContainmentResult(allowedDirAbs, candidateAbs) {
+  if (isRunDirSymlink(allowedDirAbs)) {
+    return { ok: false, reason: `Run directory is a symbolic link: ${allowedDirAbs}` };
+  }
+
+  let runsReal;
+  let baseReal;
+  let targetReal;
+  try {
+    runsReal = fs.realpathSync(RUNS_DIR);
+  } catch (err) {
+    return { ok: false, reason: `RUNS_DIR realpath failed for ${RUNS_DIR}: ${err.message}` };
+  }
+  try {
+    baseReal = fs.realpathSync(allowedDirAbs);
+  } catch (err) {
+    return { ok: false, reason: `Run directory realpath failed for ${allowedDirAbs}: ${err.message}` };
+  }
+  const baseRel = path.relative(runsReal, baseReal);
+  if (baseRel === '' || baseRel.startsWith('..') || path.isAbsolute(baseRel)) {
+    return { ok: false, reason: `Run directory resolves outside RUNS_DIR: ${baseReal}` };
+  }
+  try {
+    targetReal = fs.realpathSync(candidateAbs);
+  } catch {
+    // File does not exist yet — fall back to logical resolution for the parent dir.
+    try {
+      const parentReal = fs.realpathSync(path.dirname(candidateAbs));
+      targetReal = path.join(parentReal, path.basename(candidateAbs));
+    } catch (err) {
+      return { ok: false, reason: `Candidate parent realpath failed for ${path.dirname(candidateAbs)}: ${err.message}` };
+    }
+  }
+  const rel = path.relative(baseReal, targetReal);
+  if (rel === '') return { ok: true, reason: null };
+  if (rel.startsWith('..')) return { ok: false, reason: `Candidate resolves outside run directory: ${targetReal}` };
+  if (path.isAbsolute(rel)) return { ok: false, reason: `Candidate resolves outside run directory: ${targetReal}` };
+  return { ok: true, reason: null };
+}
+
+export function isPathContained(allowedDirAbs, candidateAbs) {
+  return pathContainmentResult(allowedDirAbs, candidateAbs).ok;
+}
+
+function manifestPathFor(runId) {
+  return path.join(allowedRunDir(runId), 'manifest-drive-upload.json');
+}
+
+function aggregateManifestStatus(items) {
+  if (items.some(item => item.status === 'failed')) return 'failed';
+  if (items.some(item => item.status === 'blocked')) return 'blocked';
+  if (items.every(item => item.status === 'uploaded')) return 'uploaded';
+  if (items.every(item => item.status === 'skipped')) return 'skipped';
+  return 'blocked';
+}
+
+function mergeUploadManifest(existing, next) {
+  if (!existing || existing.run_id !== next.run_id || !Array.isArray(existing.items)) {
+    return next;
+  }
+  const items = [
+    ...existing.items,
+    ...(next.items || []),
+  ];
+  const safetyNotes = Array.from(new Set([
+    ...(existing.safety_notes || []),
+    ...(next.safety_notes || []),
+  ]));
+  return {
+    ...existing,
+    ...next,
+    started_at: existing.started_at || next.started_at,
+    ended_at: next.ended_at,
+    status: aggregateManifestStatus(items),
+    upload_executed: items.some(item => item.upload_executed === true || item.status === 'uploaded'),
+    safety_notes: safetyNotes,
+    items,
+  };
+}
+
+function writeUploadManifest(runId, payload, { merge = false } = {}) {
+  const manifestPath = manifestPathFor(runId);
+  let nextPayload = payload;
+  if (merge && fs.existsSync(manifestPath)) {
+    try {
+      nextPayload = mergeUploadManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')), payload);
+    } catch {
+      nextPayload = payload;
+    }
+  }
+  atomicWriteJson(manifestPath, nextPayload);
+  return manifestPath;
+}
+
+function writeSkippedUploadManifest({ runId, folderId, localPath, skippedReason, message }) {
+  const now = new Date().toISOString();
+  const expectedApproval = folderId ? expectedApprovalToken(runId, folderId) : null;
+  const payload = {
+    run_id: runId,
+    folder_id: folderId || null,
+    drive_folder_id: folderId || null,
+    started_at: now,
+    ended_at: now,
+    status: skippedReason === 'local_file_missing' ? 'skipped' : 'blocked',
+    upload_executed: false,
+    oauth_attempted: false,
+    drive_create_attempted: false,
+    drive_get_attempted: false,
+    skipped_reason: skippedReason,
+    message: message || null,
+    error_reason: skippedReason,
+    error_message: message || null,
+    expected_approval_format: expectedApproval,
+    approval_mode: 'owner_token',
+    local_path: localPath || null,
+    local_md5: null,
+    drive_file_id: null,
+    drive_md5: null,
+    md5_status: 'not_applicable',
+    safety_notes: [
+      'No OAuth token was read before the owner approval gate passed.',
+      'No Google Drive API call was attempted before the owner approval gate passed.',
+      'Upload writes require user OAuth only; service-account fallback is disabled for writes.',
+    ],
+    items: [
+      {
+        local_path: localPath || null,
+        local_md5: null,
+        drive_file_id: null,
+        drive_md5: null,
+        md5_status: 'not_applicable',
+        status: skippedReason === 'local_file_missing' ? 'skipped' : 'blocked',
+        upload_executed: false,
+        oauth_attempted: false,
+        drive_create_attempted: false,
+        drive_get_attempted: false,
+        error_reason: skippedReason,
+        error_message: message || null,
+      },
+    ],
+  };
+  const manifestPath = writeUploadManifest(runId, payload, { merge: true });
+  return { manifestPath, payload };
+}
+
+function uploadItem({
+  absoluteLocalPath,
+  localMd5,
+  driveFileId,
+  driveMd5,
+  md5Status,
+  status,
+  uploadedAt,
+  oauthAttempted,
+  driveCreateAttempted,
+  driveGetAttempted,
+  errorReason = null,
+  errorMessage = null,
+}) {
+  return {
+    local_path: absoluteLocalPath,
+    local_md5: localMd5,
+    drive_file_id: driveFileId,
+    drive_md5: driveMd5,
+    md5_status: md5Status,
+    status,
+    upload_executed: Boolean(driveFileId),
+    oauth_attempted: oauthAttempted,
+    drive_create_attempted: driveCreateAttempted,
+    drive_get_attempted: driveGetAttempted,
+    error_reason: errorReason,
+    error_message: errorMessage,
+    ...(uploadedAt ? { uploaded_at: uploadedAt } : {}),
+  };
+}
+
+function writeApprovedUploadManifest({
+  runId,
+  folderId,
+  absoluteLocalPath,
+  allowedDir,
+  startedAt,
+  status,
+  uploadExecuted,
+  localMd5 = null,
+  driveFileId = null,
+  driveMd5 = null,
+  md5Status = 'not_applicable',
+  webViewLink = null,
+  oauthAttempted,
+  driveCreateAttempted,
+  driveGetAttempted,
+  errorReason = null,
+  errorMessage = null,
+}) {
+  const endedAt = new Date().toISOString();
+  const payload = {
+    run_id: runId,
+    folder_id: folderId,
+    drive_folder_id: folderId,
+    started_at: startedAt,
+    ended_at: endedAt,
+    status,
+    upload_executed: uploadExecuted,
+    oauth_attempted: oauthAttempted,
+    drive_create_attempted: driveCreateAttempted,
+    drive_get_attempted: driveGetAttempted,
+    skipped_reason: status === 'failed' ? errorReason : null,
+    message: errorMessage,
+    error_reason: errorReason,
+    error_message: errorMessage,
+    expected_approval_format: expectedApprovalToken(runId, folderId),
+    approval_mode: 'owner_token',
+    local_path: absoluteLocalPath,
+    local_md5: localMd5,
+    drive_file_id: driveFileId,
+    drive_md5: driveMd5,
+    md5_status: md5Status,
+    safety_notes: [
+      'Upload was executed only after exact owner approval token validation.',
+      'Upload writes used user OAuth only; service-account fallback is disabled for writes.',
+      `Local path was resolved and verified inside ${allowedDir}.`,
+    ],
+    web_view_link: webViewLink,
+    items: [
+      uploadItem({
+        absoluteLocalPath,
+        localMd5,
+        driveFileId,
+        driveMd5,
+        md5Status,
+        status,
+        uploadedAt: endedAt,
+        oauthAttempted,
+        driveCreateAttempted,
+        driveGetAttempted,
+        errorReason,
+        errorMessage,
+      }),
+    ],
+  };
+  const manifestPath = writeUploadManifest(runId, payload, { merge: true });
+  return { manifestPath, payload };
+}
+
+// ── Upload command ───────────────────────────────────────────────────────────
+
+export async function upload(runId, folderId, localPath, ownerApprovalToken, { driveFactory } = {}) {
+  if (!runId) {
+    console.error('ERROR: --run <run_id> is required for upload');
+    process.exit(1);
+  }
+  try {
+    validateRunId(runId);
+  } catch (err) {
+    console.error(`ERROR: ${err.message}`);
+    process.exit(1);
+  }
+  if (!folderId || !localPath) {
+    console.error('ERROR: --folder and --file are required for upload');
+    process.exit(1);
+  }
+
+  // 1. Owner approval gate — runs BEFORE any OAuth or Drive interaction.
+  const approval = checkOwnerApproval(ownerApprovalToken, runId, folderId);
+  if (!approval.ok) {
+    const { manifestPath } = writeSkippedUploadManifest({
+      runId,
+      folderId,
+      localPath,
+      skippedReason: approval.reason,
+      message:
+        approval.reason === 'missing_owner_approval'
+          ? `Provide --owner-approval "${expectedApprovalToken(runId, folderId)}"`
+          : `--owner-approval did not match expected token for run=${runId} folder=${folderId}`,
+    });
+    console.error(`ERROR: ${approval.reason}. No OAuth or Drive call performed.`);
+    console.error(`  Expected: --owner-approval "${expectedApprovalToken(runId, folderId)}"`);
+    console.error(`  Manifest: ${manifestPath} (upload_executed=false, md5_status=not_applicable)`);
+    process.exit(2);
+  }
+
+  // 2. Path containment — must be inside RUNS/<runId>/, symlink-resistant.
+  const allowedDir = allowedRunDir(runId);
+  if (!fs.existsSync(allowedDir)) {
+    fs.mkdirSync(allowedDir, { recursive: true });
+  }
   const absoluteLocalPath = path.resolve(localPath);
-  const rel = path.relative(allowedDir, absoluteLocalPath);
-  if (!runId || rel.startsWith('..') || path.isAbsolute(rel)) {
+  const containment = pathContainmentResult(allowedDir, absoluteLocalPath);
+  if (!containment.ok) {
+    const { manifestPath } = writeSkippedUploadManifest({
+      runId,
+      folderId,
+      localPath: absoluteLocalPath,
+      skippedReason: 'path_containment_violation',
+      message: `File must resolve inside ${allowedDir}. ${containment.reason}`,
+    });
     console.error(`ERROR: Path restriction violation. File must be inside runs/${runId}/`);
-    console.error(`  Allowed: ${allowedDir}`);
-    console.error(`  Got:     ${absoluteLocalPath}`);
+    console.error(`  Allowed (real): ${allowedDir}`);
+    console.error(`  Got:            ${absoluteLocalPath}`);
+    console.error(`  Manifest:       ${manifestPath} (upload_executed=false)`);
+    process.exit(2);
+  }
+
+  if (!fs.existsSync(absoluteLocalPath)) {
+    const { manifestPath } = writeSkippedUploadManifest({
+      runId,
+      folderId,
+      localPath: absoluteLocalPath,
+      skippedReason: 'local_file_missing',
+      message: `Local file not found: ${absoluteLocalPath}`,
+    });
+    console.error(`ERROR: Local file not found: ${absoluteLocalPath}`);
+    console.error(`  Manifest: ${manifestPath} (upload_executed=false)`);
+    process.exit(2);
+  }
+
+  // 3. Approved + contained — now (and only now) acquire OAuth and call Drive.
+  const fileName = path.basename(absoluteLocalPath);
+  const startedAt = new Date().toISOString();
+  let oauthAttempted = false;
+  let driveCreateAttempted = false;
+  let driveGetAttempted = false;
+  let localMd5 = null;
+  let driveFileId = null;
+  let driveAcquired = false;
+
+  try {
+    oauthAttempted = true;
+    const drive = driveFactory ? await driveFactory() : await getUploadDriveClient({});
+    driveAcquired = true;
+
+    localMd5 = await calculateMd5(absoluteLocalPath);
+    console.log(`Uploading ${fileName} (MD5: ${localMd5}) to ${folderId}...`);
+
+    const fileMetadata = { name: fileName, parents: [folderId] };
+    const media = { body: fs.createReadStream(absoluteLocalPath) };
+
+    driveCreateAttempted = true;
+    const res = await drive.files.create({
+      resource: fileMetadata,
+      media: media,
+      fields: 'id, name, md5Checksum',
+    });
+
+    driveFileId = res.data.id;
+    if (!driveFileId) {
+      throw Object.assign(new Error('Drive upload returned no file id'), { reason: 'drive_no_file_id' });
+    }
+
+    console.log(`  ✓ Uploaded. Drive File ID: ${driveFileId}`);
+
+    // 4. Verify MD5 against Drive's own checksum.
+    console.log('Verifying upload...');
+    driveGetAttempted = true;
+    const info = await drive.files.get({ fileId: driveFileId, fields: 'md5Checksum, size, webViewLink' });
+    const driveMd5 = info.data.md5Checksum;
+    const webViewLink = info.data.webViewLink || null;
+
+    let md5Status = 'not_applicable';
+    if (!driveMd5) {
+      md5Status = 'drive_md5_missing';
+      console.error(`  ✗ Drive MD5 missing for file ${driveFileId}. Verification blocked.`);
+    } else if (driveMd5 !== localMd5) {
+      md5Status = 'mismatch';
+      console.error(`  ✗ Verification FAILED: MD5 mismatch! Local: ${localMd5}, Drive: ${driveMd5}`);
+    } else {
+      md5Status = 'match';
+      console.log(`  ✓ Verification SUCCESS: MD5 matches (${localMd5}).`);
+    }
+
+    const { manifestPath } = writeApprovedUploadManifest({
+      runId,
+      folderId,
+      absoluteLocalPath,
+      allowedDir,
+      startedAt,
+      status: md5Status === 'match' ? 'uploaded' : 'blocked',
+      uploadExecuted: true,
+      localMd5,
+      driveFileId,
+      driveMd5: driveMd5 || null,
+      md5Status,
+      webViewLink,
+      oauthAttempted,
+      driveCreateAttempted,
+      driveGetAttempted,
+      errorReason: md5Status === 'match' ? null : md5Status,
+      errorMessage: md5Status === 'match' ? null : `Upload verification status: ${md5Status}`,
+    });
+    console.log(`Manifest written to ${manifestPath}`);
+
+    if (md5Status !== 'match') {
+      process.exit(1);
+    }
+    return { driveFileId, driveMd5, manifestPath, md5Status };
+  } catch (err) {
+    const reason = err.reason === 'oauth_missing' ? 'oauth_failed' : err.reason || (
+      !driveAcquired ? 'oauth_failed'
+        : !localMd5 ? 'local_md5_failed'
+          : driveCreateAttempted && !driveFileId ? 'drive_create_failed'
+            : driveGetAttempted ? 'drive_get_failed'
+              : 'upload_failed'
+    );
+    const { manifestPath } = writeApprovedUploadManifest({
+      runId,
+      folderId,
+      absoluteLocalPath,
+      allowedDir,
+      startedAt,
+      status: 'failed',
+      uploadExecuted: Boolean(driveFileId),
+      localMd5,
+      driveFileId,
+      driveMd5: null,
+      md5Status: 'not_applicable',
+      oauthAttempted,
+      driveCreateAttempted,
+      driveGetAttempted,
+      errorReason: reason,
+      errorMessage: err.message,
+    });
+    console.error(`ERROR: ${err.message}`);
+    if (err.tokenPath) console.error(`       Token path: ${err.tokenPath}`);
+    console.error(`  Manifest: ${manifestPath}`);
     process.exit(1);
   }
-
-  if (!fs.existsSync(localPath)) {
-    console.error(`ERROR: Local file not found: ${localPath}`);
-    process.exit(1);
-  }
-
-  const fileName = path.basename(localPath);
-  const localMd5 = await calculateMd5(localPath);
-  console.log(`Uploading ${fileName} (MD5: ${localMd5}) to ${folderId}...`);
-
-  const fileMetadata = { name: fileName, parents: [folderId] };
-  const media = { body: fs.createReadStream(localPath) };
-
-  const res = await drive.files.create({
-    resource: fileMetadata,
-    media: media,
-    fields: 'id, name, md5Checksum'
-  });
-
-  const driveFileId = res.data.id;
-  if (!driveFileId) {
-    throw new Error('Upload failed: No driveFileId returned');
-  }
-
-  console.log(`  ✓ Uploaded. Drive File ID: ${driveFileId}`);
-
-  // Strict Verification
-  console.log(`Verifying upload...`);
-  const info = await drive.files.get({ fileId: driveFileId, fields: 'md5Checksum, size' });
-  const driveMd5 = info.data.md5Checksum;
-
-  if (!driveMd5) {
-    throw new Error(`FATAL: Drive MD5 missing for file ${driveFileId}. Verification blocked.`);
-  }
-
-  if (driveMd5 !== localMd5) {
-    console.error(`  ✗ Verification FAILED: MD5 mismatch! Local: ${localMd5}, Drive: ${driveMd5}`);
-    process.exit(1);
-  }
-  console.log(`  ✓ Verification SUCCESS: MD5 matches (${localMd5}).`);
-  return { driveFileId, driveMd5 };
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -320,6 +740,12 @@ async function main() {
     console.error('Usage: node steel-drive.mjs <list|download|upload|setup-oauth> --run <run_id> [...]');
     process.exit(1);
   }
+  try {
+    validateRunId(runId);
+  } catch (err) {
+    console.error(`ERROR: ${err.message}`);
+    process.exit(1);
+  }
 
   if (cmd === 'list') {
     const drive = await getDriveClient(params);
@@ -328,16 +754,18 @@ async function main() {
     const drive = await getDriveClient(params);
     await download(drive, runId, params.folder);
   } else if (cmd === 'upload') {
-    // Upload uses User OAuth only — getUploadDriveClient will exit if token missing
-    const drive = await getUploadDriveClient(params);
-    await upload(drive, runId, params.folder, params.file);
+    // upload() owns the approval gate and only acquires OAuth after the gate passes.
+    await upload(runId, params.folder, params.file, params['owner-approval']);
   } else {
     console.error(`Unknown command: ${cmd}`);
     process.exit(1);
   }
 }
 
-main().catch(err => {
-  console.error('FATAL ERROR:', err.message);
-  process.exit(1);
-});
+const invokedAsScript = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+if (invokedAsScript) {
+  main().catch(err => {
+    console.error('FATAL ERROR:', err.message);
+    process.exit(1);
+  });
+}

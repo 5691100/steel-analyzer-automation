@@ -39,6 +39,8 @@ function buildSummary(runId, payload) {
         }
       : null,
     subproject_count: payload.subproject_count,
+    ...(payload.error ? { error: payload.error } : {}),
+    ...(payload.message ? { message: payload.message } : {}),
   };
 }
 
@@ -62,6 +64,24 @@ function runGit(spawnSyncFn, repoRoot, args) {
   }
 }
 
+function applyPublishOptions(payload, options) {
+  const nextPayload = { ...payload };
+
+  if (options.statusOverride) {
+    nextPayload.status = options.statusOverride;
+  }
+
+  if (options.error) {
+    nextPayload.error = options.error;
+  }
+
+  if (options.message) {
+    nextPayload.message = options.message;
+  }
+
+  return nextPayload;
+}
+
 export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), options = {}) {
   if (!RUN_ID_PATTERN.test(runId)) {
     throw new Error('Invalid runId');
@@ -71,7 +91,7 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
   const runsDir = path.join(repoRoot, 'dashboard', 'runs');
   const publishedPath = path.join(runsDir, `${runId}.json`);
   const indexPath = path.join(runsDir, 'index.json');
-  const payload = readPayload(runId, runDir);
+  const payload = applyPublishOptions(readPayload(runId, runDir), options);
   const summary = buildSummary(runId, payload);
 
   fs.mkdirSync(runsDir, { recursive: true });

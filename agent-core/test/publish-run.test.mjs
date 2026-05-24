@@ -129,6 +129,33 @@ describe('publishRun', () => {
     });
   });
 
+  it('applies a failed status override and error when analysis exists', async () => {
+    writeAnalysis({
+      run_id: 'override-failed',
+      project_name: 'Override Project',
+      status: 'complete',
+      created_at: '2026-05-24T15:00:00.000Z',
+      totals: { weight_kg: 90, paint_m2: 100 },
+      subproject_count: 6,
+    });
+
+    await publishRun('override-failed', runDir, repoRoot, {
+      dryRun: true,
+      statusOverride: 'failed',
+      error: 'Upload failed: Drive unavailable',
+    });
+
+    const payload = JSON.parse(fs.readFileSync(path.join(repoRoot, 'dashboard/runs/override-failed.json'), 'utf8'));
+    assert.equal(payload.status, 'failed');
+    assert.equal(payload.error, 'Upload failed: Drive unavailable');
+    assert.equal(payload.project_name, 'Override Project');
+
+    const index = JSON.parse(fs.readFileSync(path.join(repoRoot, 'dashboard/runs/index.json'), 'utf8'));
+    assert.equal(index[0].status, 'failed');
+    assert.equal(index[0].error, 'Upload failed: Drive unavailable');
+    assert.equal(index[0].project_name, 'Override Project');
+  });
+
   it('throws before file writes for invalid ../etc run ID', async () => {
     await assert.rejects(
       publishRun('../etc', runDir, repoRoot, { dryRun: true }),

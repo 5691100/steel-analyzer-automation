@@ -51,6 +51,31 @@ describe('Telegram Bot Logic', () => {
     return runDir;
   }
 
+  function writeAnalysis(runDir, runId) {
+    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify({
+      run_id: runId,
+      project_name: 'Existing Analysis',
+      status: 'complete',
+      created_at: '2026-05-24T15:00:00.000Z',
+      totals: { weight_kg: 1, paint_m2: 2 },
+      subproject_count: 1,
+    }));
+  }
+
+  async function handleRunCommand(updateId, text) {
+    await bot.handleUpdate({
+      update_id: updateId,
+      message: {
+        message_id: updateId,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: 12345, type: 'private' },
+        from: { id: 12345, first_name: 'Owner', is_bot: false },
+        text,
+        entities: [{ offset: 0, length: 4, type: 'bot_command' }]
+      }
+    });
+  }
+
   async function handleCallback(updateId, data) {
     await bot.handleUpdate({
       update_id: updateId,
@@ -168,6 +193,7 @@ describe('Telegram Bot Logic', () => {
     const runId = 'telegram-publish-upload-failure';
     const folderId = 'folder-id';
     const runDir = createRunWithOutput(runId);
+    writeAnalysis(runDir, runId);
     const publishCalls = [];
 
     __setTelegramBotTestDeps({
@@ -183,7 +209,10 @@ describe('Telegram Bot Logic', () => {
     await handleCallback(6, `approve_upload:${runId}:${folderId}`);
 
     assert.ok(sentMessages.some(m => m.text === '❌ Upload failed: Drive unavailable'));
-    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
+    assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
+      statusOverride: 'failed',
+      error: 'Upload failed: Drive unavailable',
+    }]]);
   });
 
   it('publishes a failed run entry when upload is rejected', async () => {
@@ -191,6 +220,8 @@ describe('Telegram Bot Logic', () => {
     const runDir = path.join(TEST_RUNS_DIR, runId);
     createdRunDirs.add(runDir);
     fs.rmSync(runDir, { recursive: true, force: true });
+    fs.mkdirSync(runDir, { recursive: true });
+    writeAnalysis(runDir, runId);
     const publishCalls = [];
 
     __setTelegramBotTestDeps({
@@ -202,6 +233,36 @@ describe('Telegram Bot Logic', () => {
 
     await handleCallback(7, `reject_upload:${runId}`);
 
-    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
+    assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
+      statusOverride: 'failed',
+      error: 'Upload rejected by owner',
+    }]]);
+  });
+
+  it('publishes a failed run entry when the pipeline crashes before approval', async () => {
+    const runId = 'telegram-pipeline-crash';
+    const folderId = 'folder-id';
+    const runDir = path.join(TEST_RUNS_DIR, runId);
+    createdRunDirs.add(runDir);
+    const publishCalls = [];
+
+    __setTelegramBotTestDeps({
+      runPipeline: async () => {
+        throw new Error('Gemini failed');
+      },
+      publishRun: async (...args) => {
+        publishCalls.push(args);
+        return { ok: true };
+      }
+    });
+
+    await handleRunCommand(8, `/run ${runId} ${folderId}`);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.ok(sentMessages.some(m => m.text === '❌ Pipeline crashed: Gemini failed'));
+    assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
+      statusOverride: 'failed',
+      error: 'Pipeline crashed: Gemini failed',
+    }]]);
   });
 });

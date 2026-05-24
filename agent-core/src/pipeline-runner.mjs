@@ -80,6 +80,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
       await notifyFn(`✅ QA: ACCEPTED\nЗагрузить на Drive?`, keyboard);
     } else {
       await notifyFn(`❌ QA: BLOCKED\n${qa.notes}`);
+      throw new Error(`QA blocked: ${qa.notes}`);
     }
 
   } catch (err) {

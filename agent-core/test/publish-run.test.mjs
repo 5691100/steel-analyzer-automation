@@ -198,6 +198,7 @@ describe('publishRun', () => {
       'add dashboard/runs/',
       'commit -m chore(runs): add run push-fails',
       'push',
+      'checkout -- dashboard/runs/',
     ]);
   });
 
@@ -221,6 +222,53 @@ describe('publishRun', () => {
     assert.deepEqual(result, { ok: false, error: 'rebase failed' });
     assert.deepEqual(calls.map((args) => args.slice(2).join(' ')), ['pull --rebase']);
     assert.equal(fs.existsSync(path.join(repoRoot, 'dashboard/runs/index.json')), false);
+  });
+
+  it('adds GITHUB_TOKEN to push command via -c http.extraheader', async () => {
+    process.env.GITHUB_TOKEN = 'test-token';
+    const calls = [];
+    const spawnSyncFn = (_command, args) => {
+      calls.push(args);
+      return { status: 0 };
+    };
+
+    await publishRun('token-test', runDir, repoRoot, { spawnSyncFn });
+
+    const pushCall = calls.find((c) => c.includes('push'));
+    assert.ok(pushCall.includes('-c'), 'Push should include -c');
+    assert.ok(pushCall.includes('http.extraheader=Authorization: Bearer test-token'));
+
+    delete process.env.GITHUB_TOKEN;
+  });
+
+  it('uses timeout and git env vars in runGit via spawnSync options', async () => {
+    let capturedOptions = null;
+    const spawnSyncFn = (_command, _args, options) => {
+      capturedOptions = options;
+      return { status: 0 };
+    };
+
+    await publishRun('options-test', runDir, repoRoot, { spawnSyncFn });
+
+    assert.ok(capturedOptions, 'capturedOptions should not be null');
+    assert.equal(capturedOptions.timeout, 30000);
+    assert.equal(capturedOptions.env.GIT_TERMINAL_PROMPT, '0');
+    assert.equal(capturedOptions.env.GIT_ASKPASS, 'echo');
+  });
+
+  it('cleans up dirty worktree with git checkout on commit/push failure', async () => {
+    const calls = [];
+    const spawnSyncFn = (_command, args) => {
+      calls.push(args);
+      if (args.includes('push')) return { status: 1, stderr: Buffer.from('push failed') };
+      return { status: 0 };
+    };
+
+    const result = await publishRun('cleanup-test', runDir, repoRoot, { spawnSyncFn });
+
+    assert.equal(result.ok, false);
+    const lastCall = calls[calls.length - 1];
+    assert.deepEqual(lastCall.slice(2), ['checkout', '--', 'dashboard/runs/']);
   });
 
   function writeAnalysis(payload) {

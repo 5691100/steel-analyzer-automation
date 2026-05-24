@@ -57,8 +57,20 @@ function gitFailure(result, fallback) {
 }
 
 function runGit(spawnSyncFn, repoRoot, args) {
+  const env = { 
+    ...process.env, 
+    GIT_TERMINAL_PROMPT: '0', 
+    GIT_ASKPASS: 'echo' 
+  };
+  
+  const options = { 
+    encoding: 'utf8', 
+    timeout: 30000, 
+    env 
+  };
+
   try {
-    return spawnSyncFn('git', ['-C', repoRoot, ...args], { encoding: 'utf8' });
+    return spawnSyncFn('git', ['-C', repoRoot, ...args], { ...options });
   } catch (error) {
     return { status: 1, error };
   }
@@ -91,12 +103,8 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
   const runsDir = path.join(repoRoot, 'dashboard', 'runs');
   const publishedPath = path.join(runsDir, `${runId}.json`);
   const indexPath = path.join(runsDir, 'index.json');
-  const payload = applyPublishOptions(readPayload(runId, runDir), options);
-  const summary = buildSummary(runId, payload);
 
-  fs.mkdirSync(runsDir, { recursive: true });
-  fs.writeFileSync(publishedPath, `${JSON.stringify(payload, null, 2)}\n`);
-
+  // Fix 4a: Rebase early (before writing files) to avoid dirty tree issues
   if (!options.dryRun) {
     const pullResult = runGit(spawnSyncFn, repoRoot, ['pull', '--rebase']);
     if (pullResult.status !== 0) {
@@ -104,17 +112,31 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
     }
   }
 
+  const payload = applyPublishOptions(readPayload(runId, runDir), options);
+  const summary = buildSummary(runId, payload);
+
+  fs.mkdirSync(runsDir, { recursive: true });
+  fs.writeFileSync(publishedPath, `${JSON.stringify(payload, null, 2)}\n`);
+
   const existing = readIndex(indexPath).filter((entry) => entry.run_id !== runId);
   fs.writeFileSync(indexPath, `${JSON.stringify([summary, ...existing], null, 2)}\n`);
 
   if (!options.dryRun) {
+    // Fix 3: Use GITHUB_TOKEN for push if available
+    const pushArgs = ['push'];
+    if (process.env.GITHUB_TOKEN) {
+      pushArgs.unshift('-c', `http.extraheader=Authorization: Bearer ${process.env.GITHUB_TOKEN}`);
+    }
+
     for (const args of [
       ['add', 'dashboard/runs/'],
       ['commit', '-m', `chore(runs): add run ${runId}`],
-      ['push'],
+      pushArgs,
     ]) {
       const result = runGit(spawnSyncFn, repoRoot, args);
       if (result.status !== 0) {
+        // Fix 4b: Clean up written files on failure so next attempt isn't dirty
+        runGit(spawnSyncFn, repoRoot, ['checkout', '--', 'dashboard/runs/']);
         return { ok: false, error: gitFailure(result, `git ${args[0]} failed`) };
       }
     }

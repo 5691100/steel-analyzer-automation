@@ -63,4 +63,31 @@ describe('Pipeline Runner', () => {
 
     assert.ok(notifications.some(n => n.includes('❌ Pipeline failed: Auth failed')));
   });
+
+  it('should throw error when QA is BLOCKED', async (t) => {
+    const notifications = [];
+    const notifyFn = async (text) => {
+      notifications.push(text);
+    };
+
+    const runId = 'blocked-run';
+    const folderId = 'test-folder';
+
+    const getDrive = async () => ({});
+    const doDownload = async () => {
+      const runDir = path.join(tempDir, 'steel-bus/runs', runId);
+      if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
+      fs.writeFileSync(path.join(runDir, 'manifest-drive-download.json'), JSON.stringify({ items: [1] }));
+    };
+    const doAnalysis = async () => ({ ok: true });
+    const doQA = async () => ({ verdict: 'BLOCKED', notes: 'QA-blocked reasons' });
+
+    const runsDir = path.join(tempDir, 'steel-bus/runs');
+    await assert.rejects(
+      runPipeline(runId, folderId, notifyFn, { getDrive, doDownload, doAnalysis, doQA, runsDir }),
+      { message: /QA blocked: QA-blocked reasons/ }
+    );
+
+    assert.ok(notifications.some(n => n.includes('❌ QA: BLOCKED')));
+  });
 });

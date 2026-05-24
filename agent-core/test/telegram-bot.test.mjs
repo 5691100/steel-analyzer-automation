@@ -9,7 +9,10 @@ import { fileURLToPath } from 'url';
 process.env.TELEGRAM_BOT_TOKEN = '000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 process.env.TELEGRAM_CHAT_ID = '12345';
 
-const { bot } = await import('../src/telegram-bot.mjs');
+const { bot, __setTelegramBotTestDeps } = await import('../src/telegram-bot.mjs');
+
+const TEST_RUNS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'steel-bus', 'runs');
+const createdRunDirs = new Set();
 
 // Register a single transformer for all tests in this process
 let sentMessages = [];
@@ -28,6 +31,43 @@ describe('Telegram Bot Logic', () => {
     bot.botInfo = { id: 1, is_bot: true, first_name: 'SteelBot', username: 'steel_bot', can_join_groups: true, can_read_all_group_messages: false, supports_inline_queries: false };
     sentMessages.length = 0; // Clear the array
   });
+
+  afterEach(() => {
+    __setTelegramBotTestDeps();
+    for (const runDir of createdRunDirs) {
+      fs.rmSync(runDir, { recursive: true, force: true });
+    }
+    createdRunDirs.clear();
+  });
+
+  function createRunWithOutput(runId, files = ['result.xlsx']) {
+    const runDir = path.join(TEST_RUNS_DIR, runId);
+    createdRunDirs.add(runDir);
+    fs.rmSync(runDir, { recursive: true, force: true });
+    fs.mkdirSync(path.join(runDir, 'output'), { recursive: true });
+    for (const file of files) {
+      fs.writeFileSync(path.join(runDir, 'output', file), 'xlsx fixture');
+    }
+    return runDir;
+  }
+
+  async function handleCallback(updateId, data) {
+    await bot.handleUpdate({
+      update_id: updateId,
+      callback_query: {
+        id: String(updateId),
+        from: { id: 12345, first_name: 'Owner', is_bot: false },
+        chat_instance: String(updateId),
+        message: {
+          message_id: updateId,
+          date: Math.floor(Date.now() / 1000),
+          chat: { id: 12345, type: 'private' },
+          text: 'Upload request'
+        },
+        data
+      }
+    });
+  }
 
   it('should ignore messages from unauthorized chat ids', async (t) => {
     await bot.handleUpdate({
@@ -80,5 +120,88 @@ describe('Telegram Bot Logic', () => {
 
     assert.ok(sentMessages.length > 0, 'Should have sent an error message');
     assert.ok(sentMessages.some(m => m.text && m.text.includes('Invalid run_id in callback')), 'Should report validation error in callback');
+  });
+
+  it('calls publishRun after successful upload approval', async () => {
+    const runId = 'telegram-publish-success';
+    const folderId = 'folder-id';
+    const runDir = createRunWithOutput(runId);
+    const publishCalls = [];
+    const uploadCalls = [];
+
+    __setTelegramBotTestDeps({
+      upload: async (...args) => {
+        uploadCalls.push(args);
+        return { manifestPath: path.join(runDir, 'output', 'result.xlsx'), md5Status: 'OK' };
+      },
+      publishRun: async (...args) => {
+        publishCalls.push(args);
+        return { ok: true };
+      }
+    });
+
+    await handleCallback(4, `approve_upload:${runId}:${folderId}`);
+
+    assert.strictEqual(uploadCalls.length, 1);
+    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
+  });
+
+  it('sends a warning when dashboard publish fails after upload success', async () => {
+    const runId = 'telegram-publish-warning';
+    const folderId = 'folder-id';
+    const runDir = createRunWithOutput(runId);
+
+    __setTelegramBotTestDeps({
+      upload: async () => ({ manifestPath: path.join(runDir, 'output', 'result.xlsx'), md5Status: 'OK' }),
+      publishRun: async () => ({ ok: false, error: 'push failed' })
+    });
+
+    await handleCallback(5, `approve_upload:${runId}:${folderId}`);
+
+    assert.ok(
+      sentMessages.some(m => m.text === '⚠️ Uploaded to Drive, but dashboard publish failed: push failed'),
+      'Should warn that dashboard publishing failed without failing upload'
+    );
+  });
+
+  it('publishes a failed run entry when upload approval fails', async () => {
+    const runId = 'telegram-publish-upload-failure';
+    const folderId = 'folder-id';
+    const runDir = createRunWithOutput(runId);
+    const publishCalls = [];
+
+    __setTelegramBotTestDeps({
+      upload: async () => {
+        throw new Error('Drive unavailable');
+      },
+      publishRun: async (...args) => {
+        publishCalls.push(args);
+        return { ok: true };
+      }
+    });
+
+    await handleCallback(6, `approve_upload:${runId}:${folderId}`);
+
+    assert.ok(sentMessages.some(m => m.text === '❌ Upload failed: Drive unavailable'));
+    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
+  });
+
+  it('publishes a failed run entry when upload is rejected', async () => {
+    const runId = 'telegram-publish-rejected';
+    const runDir = path.join(TEST_RUNS_DIR, runId);
+    createdRunDirs.add(runDir);
+    fs.rmSync(runDir, { recursive: true, force: true });
+    const publishCalls = [];
+
+    __setTelegramBotTestDeps({
+      publishRun: async (...args) => {
+        publishCalls.push(args);
+        return { ok: true };
+      }
+    });
+
+    await handleCallback(7, `reject_upload:${runId}`);
+
+    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
   });
 });

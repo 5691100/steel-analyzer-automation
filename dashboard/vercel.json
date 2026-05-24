@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "name": "steel-analyzer-report",
+  "builds": [{ "src": "**", "use": "@vercel/static" }],
+  "headers": [{
+    "source": "/runs/(.*).json",
+    "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+  }]
+}

@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { runPipeline } from './pipeline-runner.mjs';
-import { validateRunId, upload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
+import { validateRunId, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
+import { publishRun as defaultPublishRun } from './publish-run.mjs';
 import { STATES, stateLabel } from '../steel-bus/lib/state-machine.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,12 +16,20 @@ const RUNS_DIR = join(AGENT_CORE, 'steel-bus/runs');
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const allowedChatId = Number(process.env.TELEGRAM_CHAT_ID);
 
+let upload = driveUpload;
+let publishRun = defaultPublishRun;
+
 if (!token || !Number.isFinite(allowedChatId)) {
   console.error('FATAL: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required and must be valid');
   process.exit(1);
 }
 
 const bot = new Bot(token);
+
+function __setTelegramBotTestDeps(deps = {}) {
+  upload = deps.upload ?? driveUpload;
+  publishRun = deps.publishRun ?? defaultPublishRun;
+}
 
 /**
  * Logs a signal to the run's ledger.jsonl.
@@ -142,10 +151,16 @@ bot.callbackQuery(/^approve_upload:(.+):(.+)$/, async (ctx) => {
       results.push(res);
     }
 
+    const pubResult = await publishRun(runId, join(RUNS_DIR, runId)).catch(err => ({ ok: false, error: err.message }));
+    if (!pubResult.ok) {
+      await ctx.reply(`⚠️ Uploaded to Drive, but dashboard publish failed: ${pubResult.error}`);
+    }
+
     const fileList = results.map(r => `- ${path.basename(r.manifestPath)} → MD5 ${r.md5Status}`).join('\n');
     await ctx.reply(`✅ Upload завершён\nRun: ${runId}\n\n${fileList}\n\nDrive folder: https://drive.google.com/drive/folders/${folderId}`);
   } catch (err) {
     await ctx.reply(`❌ Upload failed: ${err.message}`);
+    await publishRun(runId, join(RUNS_DIR, runId)).catch(() => {});
   }
 });
 
@@ -159,6 +174,7 @@ bot.callbackQuery(/^reject_upload:(.+)$/, async (ctx) => {
   }
   await ctx.answerCallbackQuery('Rejected');
   logSignal(runId, { schema: 'steel.upload-rejected.v1', run_id: runId });
+  await publishRun(runId, join(RUNS_DIR, runId)).catch(() => {});
   await ctx.editMessageText(`❌ Upload отклонён для run ${runId}`);
 });
 
@@ -175,4 +191,4 @@ if (isMain) {
   console.log('Steel Bot started...');
 }
 
-export { bot, logSignal };
+export { bot, logSignal, __setTelegramBotTestDeps };

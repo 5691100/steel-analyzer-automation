@@ -1,0 +1,73 @@
+# steel-analyzer-automation
+
+Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs Gemini-based extraction, generates Excel workbooks, performs Claude QA review, and uploads verified artifacts back to Drive.
+
+## Stack
+
+- Runtime: Node.js (ESM, `"type": "module"`)
+- Key libraries: `exceljs ^4.4.0`, `googleapis ^171.4.0`
+- No n8n in this pipeline
+
+## Architecture
+
+```
+Telegram bot trigger
+  → steel-orchestrator.mjs (file-bus watcher, PM2)
+    → steel-drive.mjs download (User OAuth, MD5-verified)
+    → Gemini CLI (extraction)
+    → workbook-generator.mjs (JSON → 3 xlsx)
+    → artifact-verifier.mjs (output check)
+    → Claude QA review
+    → CodexClaw integration
+    → steel-drive.mjs upload (owner-approval gate required)
+```
+
+## Key Commands
+
+```bash
+# Run tests
+cd agent-core && npm test
+
+# Drive operations
+node agent-core/scripts/steel-drive.mjs list --run <id> --folder <folder_id>
+node agent-core/scripts/steel-drive.mjs download --run <id> --folder <folder_id>
+node agent-core/scripts/steel-drive.mjs upload --run <id> --folder <folder_id> \
+  --file <path> --owner-approval "I_APPROVE_STEEL_UPLOAD:<run_id>:<folder_id>"
+
+# Orchestrator
+node agent-core/scripts/steel-orchestrator.mjs
+node agent-core/scripts/steel-orchestrator.mjs status
+node agent-core/scripts/steel-orchestrator.mjs init <run_id> <project_name> <delivery_mode>
+```
+
+## File Map
+
+```
+agent-core/
+  package.json                        npm root (steel-agent-core)
+  scripts/
+    steel-drive.mjs                   Drive wrapper (799 lines)
+    steel-orchestrator.mjs            File-bus watcher (843 lines)
+  src/
+    workbook-generator.mjs            JSON → xlsx via ExcelJS (341 lines)
+    artifact-verifier.mjs             Output directory checker (60 lines)
+  steel-bus/
+    lib/state-machine.mjs             Pure state machine, 17 states
+    lib/gepa-register.mjs             GEPA proposal tracking
+    inbox/                            Signal drop zone (runtime)
+    runs/                             Per-run state dirs (runtime, not committed)
+    dead-letter/                      Failed signal archive (runtime)
+  schemas/                            JSON schemas for all bus signals
+  test/                               *.test.mjs test suite
+docs/
+  superflow/specs/                    Feature specs
+  superflow/plans/                    Sprint plans
+  handoffs/                           Cross-runtime handoff notes
+  operations/                         Runbooks
+```
+
+## State Machine States
+
+`requested` → `sources_manifested` → `sources_downloaded` → `extraction_done` → `workbooks_generated` → `workbooks_validated` → `producer_handoff_done` → `claude_review_requested` → `claude_review_passed` | `claude_review_blocked` → `codex_integration_requested` → `codex_integration_done` → `gepa_proposed` → `gepa_reviewed` → `upload_ready` → `uploaded_verified` → `closed` | `dead_letter`
+
+<!-- updated-by-superflow:2026-05-24 -->

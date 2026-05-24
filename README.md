@@ -7,7 +7,8 @@ Automated Google Drive pipeline for steel structure workbook analysis (SIA Stars
 - **Upload**: User OAuth 2.0 only — no Service Account fallback for writes
 - **List / Download**: Service Account (read-only operations)
 - **No n8n upload path**: Direct Drive API only; n8n webhook upload removed in Slice 6
-- **Integrity**: MD5 hash verified on every download; upload path-contained to run directory
+- **Integrity**: MD5 hash verified on every download/upload; upload path-contained to run directory
+- **Owner gate**: direct uploads require `--owner-approval "I_APPROVE_STEEL_UPLOAD:<run_id>:<folder_id>"`
 
 ## Setup
 
@@ -36,18 +37,18 @@ Token is stored at `~/.config/codexclaw/secrets/google-oauth-user.json` (mode 06
 node agent-core/scripts/steel-drive.mjs upload \
   --run <run_id> \
   --folder <drive_folder_id> \
-  --file agent-core/steel-bus/runs/<run_id>/your-file.xlsx
+  --file agent-core/steel-bus/runs/<run_id>/your-file.xlsx \
+  --owner-approval "I_APPROVE_STEEL_UPLOAD:<run_id>:<drive_folder_id>"
 
 # List files in a folder
-node agent-core/scripts/steel-drive.mjs list --folder <drive_folder_id>
+node agent-core/scripts/steel-drive.mjs list \
+  --run <run_id> \
+  --folder <drive_folder_id>
 
 # Download files from a folder
 node agent-core/scripts/steel-drive.mjs download \
-  --folder <drive_folder_id> \
-  --dest agent-core/steel-bus/runs/<run_id>/
-
-# Verify local files against manifest
-node agent-core/scripts/steel-drive.mjs verify --run <run_id>
+  --run <run_id> \
+  --folder <drive_folder_id>
 ```
 
 ## Orchestrator
@@ -63,8 +64,12 @@ pm2 start agent-core/scripts/steel-orchestrator.mjs --name steel-orchestrator
 ## Security
 
 - Upload is **User OAuth only** — Service Account cannot write files
-- File paths for upload are **contained to `runs/<run_id>/`** — no path traversal
+- Direct upload is **owner-gated** — missing or wrong approval writes `manifest-drive-upload.json` with `upload_executed:false` before any OAuth or Drive call
+- Owner approval is accepted only from `--owner-approval <token>` on the CLI. No environment variable, `.env`, or PM2 ecosystem value is consulted.
+- The owner approval token is not a secret; it is bound to one run and folder, but it can appear in process tables and shell history.
+- File paths for upload are **contained to `runs/<run_id>/`** — no path traversal or symlinked run-directory escape
 - Download MD5 is verified against Drive metadata — mismatch aborts immediately
+- Upload MD5 is verified against Drive metadata and recorded in `manifest-drive-upload.json`; multi-workbook uploads and re-runs append workbook items to that single manifest
 - OAuth tokens stored with `0700` directory and `0600` file permissions
 - No credentials committed to this repository
 
@@ -75,6 +80,21 @@ See [docs/production-dry-run.md](docs/production-dry-run.md) for:
 - Drive folder listing and download dry-run
 - PASS/FAIL criteria and manifest locations
 - Upload approval gate
+
+## Tests
+
+```bash
+cd agent-core
+npm test
+```
+
+## Handoffs And Runtime Split
+
+Read [docs/handoffs/{steel} {summary} handoff index - 2026-05-24.md](docs/handoffs/%7Bsteel%7D%20%7Bsummary%7D%20handoff%20index%20-%202026-05-24.md) before sprint planning.
+It records the active Steel handoff context, legacy-path policy, and the open
+Personal POS follow-up for global/project `AGENTS.md` strategy.
+
+See [docs/operations/{steel} {runbook} llm split workflow - 2026-05-24.md](docs/operations/%7Bsteel%7D%20%7Brunbook%7D%20llm%20split%20workflow%20-%202026-05-24.md) for the owner-mediated Codex/Claude/Gemini split.
 
 ## CI
 

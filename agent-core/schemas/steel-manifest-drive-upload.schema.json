@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "steel.manifest-drive-upload.v1",
+  "title": "Steel Drive Upload Manifest",
+  "description": "Atomic manifest written by steel-drive.mjs upload — covers both blocked/skipped attempts (upload_executed=false) and executed uploads (upload_executed=true).",
+  "type": "object",
+  "required": ["run_id", "started_at", "ended_at", "status", "upload_executed", "approval_mode", "md5_status", "safety_notes", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string", "minLength": 1 },
+    "folder_id": { "type": ["string", "null"] },
+    "drive_folder_id": { "type": ["string", "null"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["blocked", "skipped", "uploaded", "failed"]
+    },
+    "upload_executed": { "type": "boolean" },
+    "oauth_attempted": { "type": "boolean" },
+    "drive_create_attempted": { "type": "boolean" },
+    "drive_get_attempted": { "type": "boolean" },
+    "skipped_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "missing_owner_approval",
+        "wrong_owner_approval",
+        "path_containment_violation",
+        "local_file_missing",
+        "drive_no_file_id",
+        "oauth_failed",
+        "local_md5_failed",
+        "drive_create_failed",
+        "drive_get_failed",
+        "upload_failed"
+      ]
+    },
+    "message": { "type": ["string", "null"] },
+    "error_reason": { "type": ["string", "null"] },
+    "error_message": { "type": ["string", "null"] },
+    "expected_approval_format": { "type": ["string", "null"] },
+    "approval_mode": {
+      "type": "string",
+      "enum": ["owner_token"]
+    },
+    "local_path": { "type": ["string", "null"] },
+    "local_md5": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        { "type": "null" }
+      ]
+    },
+    "drive_file_id": { "type": ["string", "null"] },
+    "drive_md5": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+        { "type": "null" }
+      ]
+    },
+    "md5_status": {
+      "type": "string",
+      "enum": ["match", "mismatch", "drive_md5_missing", "not_applicable"]
+    },
+    "safety_notes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "web_view_link": { "type": ["string", "null"] },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["local_path", "local_md5", "drive_file_id", "drive_md5", "md5_status"],
+        "additionalProperties": true,
+        "properties": {
+          "local_path": { "type": ["string", "null"] },
+          "local_md5": {
+            "anyOf": [
+              { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+              { "type": "null" }
+            ]
+          },
+          "drive_file_id": { "type": ["string", "null"] },
+          "drive_md5": {
+            "anyOf": [
+              { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+              { "type": "null" }
+            ]
+          },
+          "md5_status": {
+            "type": "string",
+            "enum": ["match", "mismatch", "drive_md5_missing", "not_applicable"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["blocked", "skipped", "uploaded", "failed"]
+          },
+          "upload_executed": { "type": "boolean" },
+          "oauth_attempted": { "type": "boolean" },
+          "drive_create_attempted": { "type": "boolean" },
+          "drive_get_attempted": { "type": "boolean" },
+          "error_reason": { "type": ["string", "null"] },
+          "error_message": { "type": ["string", "null"] },
+          "uploaded_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "upload_executed": { "const": false } }, "required": ["upload_executed"] },
+      "then": { "required": ["skipped_reason"] }
+    }
+  ]
+}

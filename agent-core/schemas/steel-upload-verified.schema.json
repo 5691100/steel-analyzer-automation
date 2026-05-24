@@ -2,12 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "steel.upload-verified.v1",
   "title": "Steel Upload Verified",
-  "description": "Signal written after Drive upload + download-back MD5 verification.",
+  "description": "Signal written after Drive upload + Drive-side MD5 verification. Sprint 7 adds optional upload_manifest_path pointing at manifest-drive-upload.json and verified_by, while keeping legacy uploaded_by accepted.",
   "type": "object",
   "required": [
-    "schema", "run_id", "uploaded_by",
-    "local_path", "local_md5",
-    "drive_file_id", "drive_md5",
+    "schema", "run_id",
     "verification_status", "created_at"
   ],
   "additionalProperties": false,
@@ -15,15 +13,26 @@
     "schema": { "type": "string", "const": "steel.upload-verified.v1" },
     "run_id": { "type": "string", "minLength": 1 },
     "uploaded_by": { "type": "string" },
+    "verified_by": { "type": "string" },
     "local_path": { "type": "string" },
     "local_md5": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
     "drive_file_id": { "type": "string" },
     "drive_md5": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "drive_folder_id": { "type": "string" },
     "web_view_link": { "type": "string" },
+    "uploaded_files": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "upload_manifest_path": { "type": "string" },
     "verification_status": {
       "type": "string",
       "enum": ["verified", "md5_mismatch", "download_failed"]
     },
     "created_at": { "type": "string", "format": "date-time" }
-  }
+  },
+  "anyOf": [
+    { "required": ["uploaded_by"] },
+    { "required": ["verified_by"] }
+  ]
 }

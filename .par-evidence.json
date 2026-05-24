@@ -1,29 +1,10 @@
 {
-  "sprint": 6,
-  "slice": "steel-analyzer-slice6",
+  "sprint": 7,
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
+  "gemini_runtime": "PASS",
   "docs_update": "UPDATED",
   "docs_review": "PASS",
-  "provider": "claude-opus-4-7|claude-sonnet-4-6",
-  "tests": {
-    "slice6_oauth_e2e": "PASS",
-    "drive_file_id": "1mpKiyDu0ELkPHGO2Z46rEh5PUw59oTlX",
-    "drive_md5": "61d2dbdc3087b9b19982fe3f743e0868",
-    "run_id": "slice-6-test"
-  },
-  "evidence": {
-    "commits": [
-      "83be8e0 fix(steel): slice6 oauth hardening",
-      "a7b5286 fix(steel): restore upload containment + download MD5 guard"
-    ],
-    "fixes_applied": [
-      "upload-oauth-only: SA fallback removed",
-      "upload-webhook-url: removed",
-      "token-storage-permissions: dir=0700 file=0600",
-      "upload-path-containment: restored",
-      "download-md5-guard: restored"
-    ]
-  },
-  "ts": "2026-05-23T15:30:00Z"
+  "provider": "owner-mediated-claude-gemini-codex",
+  "ts": "2026-05-24T10:30:00Z"
 }

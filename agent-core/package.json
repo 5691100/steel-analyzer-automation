@@ -8,7 +8,8 @@
     "install:check": "node -e \"import('googleapis').then(() => console.log('googleapis OK')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "drive:list":     "node scripts/steel-drive.mjs list --run dry-run-$(date +%s) --folder 14rmeQNlj1tXphidzvrZqSiJVsvOVw2dH",
     "drive:download": "node scripts/steel-drive.mjs download --run dry-run-$(date +%s) --folder 14rmeQNlj1tXphidzvrZqSiJVsvOVw2dH",
-    "oauth:setup":    "node scripts/steel-drive.mjs setup-oauth"
+    "oauth:setup":    "node scripts/steel-drive.mjs setup-oauth",
+    "test":           "node --test test/*.test.mjs"
   },
   "dependencies": {
     "googleapis": "^171.4.0"

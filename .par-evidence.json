@@ -1,10 +1,9 @@
 {
-  "sprint": 10,
-  "branch": "feat/sprint-10-telegram-bot",
+  "sprint": 11,
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
   "docs_update": "UPDATED",
   "docs_review": "PASS",
   "provider": "split-focus",
-  "ts": "2026-05-24"
+  "ts": "2026-05-24T14:30:00Z"
 }

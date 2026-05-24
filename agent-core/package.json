@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0",
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "grammy": "^1.43.0"
   }
 }

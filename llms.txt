@@ -5,21 +5,25 @@ Automated steel structure analysis pipeline. Accepts raw project files from Goog
 ## Stack
 
 - Runtime: Node.js (ESM, `"type": "module"`)
-- Key libraries: `exceljs ^4.4.0`, `googleapis ^171.4.0`
+- Key libraries: `exceljs ^4.4.0`, `googleapis ^171.4.0`, `grammy` (Telegram)
 - No n8n in this pipeline
 
 ## Architecture
 
 ```
-Telegram bot trigger
-  → steel-orchestrator.mjs (file-bus watcher, PM2)
-    → steel-drive.mjs download (User OAuth, MD5-verified)
-    → Gemini CLI (extraction)
-    → workbook-generator.mjs (JSON → 3 xlsx)
-    → artifact-verifier.mjs (output check)
-    → Claude QA review
-    → CodexClaw integration
-    → steel-drive.mjs upload (owner-approval gate required)
+telegram-bot.mjs (/run command, TELEGRAM_CHAT_ID gate)
+  → pipeline-runner.mjs (runPipeline)
+      → steel-drive.mjs download (User OAuth, MD5-verified)
+      → llm-dispatcher.mjs (dispatchGeminiAnalysis via spawnSync gemini)
+          → steel-analysis-prompt.mjs (buildAnalysisPrompt)
+          → workbook-generator.mjs (JSON → 3 xlsx)
+          → artifact-verifier.mjs (output check)
+      → dispatchClaudeQA (stub in Sprint 10, auto-ACCEPTED)
+      → Telegram inline buttons: approve_upload / reject_upload
+  → steel-drive.mjs upload (owner-approval token required)
+
+steel-orchestrator.mjs (file-bus watcher, PM2) — parallel long-running process
+ecosystem.config.cjs — PM2 config: steel-bot + steel-orchestrator
 ```
 
 ## Key Commands
@@ -38,17 +42,28 @@ node agent-core/scripts/steel-drive.mjs upload --run <id> --folder <folder_id> \
 node agent-core/scripts/steel-orchestrator.mjs
 node agent-core/scripts/steel-orchestrator.mjs status
 node agent-core/scripts/steel-orchestrator.mjs init <run_id> <project_name> <delivery_mode>
+
+# PM2 (Sprint 10)
+pm2 start ecosystem.config.cjs          # starts steel-bot + steel-orchestrator
+pm2 logs steel-bot
+pm2 restart steel-bot
 ```
 
 ## File Map
 
 ```
+ecosystem.config.cjs                  PM2 config: steel-bot + steel-orchestrator
 agent-core/
   package.json                        npm root (steel-agent-core)
   scripts/
     steel-drive.mjs                   Drive wrapper (799 lines)
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
+    telegram-bot.mjs                  grammy bot, /run /status /cancel + approve/reject (178 lines)
+    pipeline-runner.mjs               runPipeline(): download→analysis→QA→approval (90 lines)
+    llm-dispatcher.mjs                dispatchGeminiAnalysis() via spawnSync gemini (81 lines)
+    prompts/
+      steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini (33 lines)
     workbook-generator.mjs            JSON → xlsx via ExcelJS (341 lines)
     artifact-verifier.mjs             Output directory checker (60 lines)
   steel-bus/
@@ -58,7 +73,7 @@ agent-core/
     runs/                             Per-run state dirs (runtime, not committed)
     dead-letter/                      Failed signal archive (runtime)
   schemas/                            JSON schemas for all bus signals
-  test/                               *.test.mjs test suite
+  test/                               *.test.mjs — includes telegram-bot, llm-dispatcher, pipeline-runner tests (Sprint 10)
 docs/
   superflow/specs/                    Feature specs
   superflow/plans/                    Sprint plans
@@ -71,3 +86,4 @@ docs/
 `requested` → `sources_manifested` → `sources_downloaded` → `extraction_done` → `workbooks_generated` → `workbooks_validated` → `producer_handoff_done` → `claude_review_requested` → `claude_review_passed` | `claude_review_blocked` → `codex_integration_requested` → `codex_integration_done` → `gepa_proposed` → `gepa_reviewed` → `upload_ready` → `uploaded_verified` → `closed` | `dead_letter`
 
 <!-- updated-by-superflow:2026-05-24 -->
+<!-- sprint:10 -->

@@ -82,7 +82,7 @@ async function getOAuthClient() {
   return oauth2Client;
 }
 
-async function getDriveClient(cmdArgs) {
+export async function getDriveClient(cmdArgs) {
   // 1. Try User OAuth first
   const oauthClient = await getOAuthClient();
   if (oauthClient) {

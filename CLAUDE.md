@@ -23,8 +23,9 @@ Test files: `agent-core/test/*.test.mjs`
 |------|---------|
 | `agent-core/scripts/steel-drive.mjs` (799 lines) | Google Drive list/download/upload with MD5 verification and atomic manifests. Uses User OAuth only — no Service Account fallback. |
 | `agent-core/scripts/steel-orchestrator.mjs` (843 lines) | File-bus watcher. Watches `steel-bus/inbox/`, drives state transitions, calls steel-drive and external CLIs. |
-| `agent-core/src/telegram-bot.mjs` (178 lines) | grammy Telegram bot. Commands: `/run <run_id> <folder_id>`, `/status <run_id>`, `/cancel <run_id>`. Inline buttons: `approve_upload`, `reject_upload`. Security: `TELEGRAM_CHAT_ID` gate on every update. |
+| `agent-core/src/telegram-bot.mjs` (178 lines) | grammy Telegram bot. Commands: `/run <run_id> <folder_id>`, `/status <run_id>`, `/cancel <run_id>`. Inline buttons: `approve_upload`, `reject_upload`. Security: `TELEGRAM_CHAT_ID` gate on every update. Auto-publishes to Vercel dashboard after final decisions. |
 | `agent-core/src/pipeline-runner.mjs` (90 lines) | `runPipeline(runId, folderId, notifyFn)` — orchestrates download → Gemini analysis → Claude QA → Telegram approval prompt. |
+| `agent-core/src/publish-run.mjs` (54 lines) | `publishRun(runId, status, details)` — maintains `dashboard/runs/index.json` and pushes to GitHub for Vercel deployment. |
 | `agent-core/src/llm-dispatcher.mjs` (81 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `gemini -p <prompt>` via `spawnSync`, parses JSON, generates workbooks, verifies output. |
 | `agent-core/src/prompts/steel-analysis-prompt.mjs` (33 lines) | `buildAnalysisPrompt(runId, sourceTexts)` — builds the structured Gemini prompt from source `.txt` files. |
 | `agent-core/src/workbook-generator.mjs` (341 lines) | JSON → 3 xlsx files (BoM, MaterialList, Description) via ExcelJS. Entry: `generateWorkbooks(data, outputDir)`. |
@@ -51,6 +52,7 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 
 - `agent-core/scripts/` — changes via PR only. CodexClaw is integrator.
 - `agent-core/src/` — changes via PR only. CodexClaw is integrator.
+- `dashboard/runs/` — runtime run history for Vercel dashboard. Maintained by `publish-run.mjs`.
 - `agent-core/steel-bus/runs/` — runtime artifacts, never committed. Add to `.gitignore` if missing.
 - `agent-core/schemas/` — schema changes require spec update in `docs/superflow/specs/`.
 
@@ -59,7 +61,7 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 - OAuth token path: `/root/.config/codexclaw/secrets/google-oauth-user.json`
 - Bus root: `agent-core/steel-bus/` — `inbox/`, `runs/`, `dead-letter/`
 - Dependencies: `exceljs ^4.4.0`, `googleapis ^171.4.0`, `grammy` (Telegram bot)
-- Required env vars for bot: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (numeric; bot exits if either missing)
+- Required env vars for bot: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (numeric; bot exits if either missing), `GITHUB_TOKEN` (for dashboard auto-push)
 - PM2 launch: `pm2 start ecosystem.config.cjs` starts both `steel-orchestrator` and `steel-bot`
 
 ## Documentation
@@ -71,4 +73,4 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 
 <!-- superflow:onboarded -->
 <!-- updated-by-superflow:2026-05-24 -->
-<!-- sprint:10 -->
+<!-- sprint:11 -->

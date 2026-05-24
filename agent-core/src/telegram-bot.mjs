@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { runPipeline } from './pipeline-runner.mjs';
+import { runPipeline as defaultRunPipeline } from './pipeline-runner.mjs';
 import { validateRunId, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 import { STATES, stateLabel } from '../steel-bus/lib/state-machine.mjs';
@@ -18,6 +18,7 @@ const allowedChatId = Number(process.env.TELEGRAM_CHAT_ID);
 
 let upload = driveUpload;
 let publishRun = defaultPublishRun;
+let runPipeline = defaultRunPipeline;
 
 if (!token || !Number.isFinite(allowedChatId)) {
   console.error('FATAL: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required and must be valid');
@@ -29,6 +30,7 @@ const bot = new Bot(token);
 function __setTelegramBotTestDeps(deps = {}) {
   upload = deps.upload ?? driveUpload;
   publishRun = deps.publishRun ?? defaultPublishRun;
+  runPipeline = deps.runPipeline ?? defaultRunPipeline;
 }
 
 /**
@@ -87,7 +89,12 @@ bot.command('run', async (ctx) => {
 
   runPipeline(runId, folderId, notifyFn).catch(async err => {
     console.error('[pipeline-runner]', err);
-    await ctx.reply(`❌ Pipeline crashed: ${err.message}`).catch(() => {});
+    const error = `Pipeline crashed: ${err.message}`;
+    await ctx.reply(`❌ ${error}`).catch(() => {});
+    await publishRun(runId, join(RUNS_DIR, runId), undefined, {
+      statusOverride: 'failed',
+      error,
+    }).catch(() => {});
   });
 });
 
@@ -159,8 +166,12 @@ bot.callbackQuery(/^approve_upload:(.+):(.+)$/, async (ctx) => {
     const fileList = results.map(r => `- ${path.basename(r.manifestPath)} → MD5 ${r.md5Status}`).join('\n');
     await ctx.reply(`✅ Upload завершён\nRun: ${runId}\n\n${fileList}\n\nDrive folder: https://drive.google.com/drive/folders/${folderId}`);
   } catch (err) {
-    await ctx.reply(`❌ Upload failed: ${err.message}`);
-    await publishRun(runId, join(RUNS_DIR, runId)).catch(() => {});
+    const error = `Upload failed: ${err.message}`;
+    await ctx.reply(`❌ ${error}`);
+    await publishRun(runId, join(RUNS_DIR, runId), undefined, {
+      statusOverride: 'failed',
+      error,
+    }).catch(() => {});
   }
 });
 
@@ -174,7 +185,10 @@ bot.callbackQuery(/^reject_upload:(.+)$/, async (ctx) => {
   }
   await ctx.answerCallbackQuery('Rejected');
   logSignal(runId, { schema: 'steel.upload-rejected.v1', run_id: runId });
-  await publishRun(runId, join(RUNS_DIR, runId)).catch(() => {});
+  await publishRun(runId, join(RUNS_DIR, runId), undefined, {
+    statusOverride: 'failed',
+    error: 'Upload rejected by owner',
+  }).catch(() => {});
   await ctx.editMessageText(`❌ Upload отклонён для run ${runId}`);
 });
 

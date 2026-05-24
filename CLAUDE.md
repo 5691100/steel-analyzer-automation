@@ -23,14 +23,15 @@ Test files: `agent-core/test/*.test.mjs`
 |------|---------|
 | `agent-core/scripts/steel-drive.mjs` (799 lines) | Google Drive list/download/upload with MD5 verification and atomic manifests. Uses User OAuth only — no Service Account fallback. |
 | `agent-core/scripts/steel-orchestrator.mjs` (843 lines) | File-bus watcher. Watches `steel-bus/inbox/`, drives state transitions, calls steel-drive and external CLIs. |
-| `agent-core/src/telegram-bot.mjs` (178 lines) | grammy Telegram bot. Commands: `/run <run_id> <folder_id>`, `/status <run_id>`, `/cancel <run_id>`. Inline buttons: `approve_upload`, `reject_upload`. Security: `TELEGRAM_CHAT_ID` gate on every update. Auto-publishes to Vercel dashboard after final decisions. |
+| `agent-core/src/telegram-bot.mjs` (208 lines) | grammy Telegram bot. Commands: `/run <run_id> <folder_id>`, `/status <run_id>`, `/cancel <run_id>`. Inline buttons: `approve_upload`, `reject_upload`. Security: `TELEGRAM_CHAT_ID` gate on every update. Publishes dashboard run JSON after successful upload, upload failure, pipeline crash, or owner rejection. |
 | `agent-core/src/pipeline-runner.mjs` (90 lines) | `runPipeline(runId, folderId, notifyFn)` — orchestrates download → Gemini analysis → Claude QA → Telegram approval prompt. |
-| `agent-core/src/publish-run.mjs` (54 lines) | `publishRun(runId, status, details)` — maintains `dashboard/runs/index.json` and pushes to GitHub for Vercel deployment. |
+| `agent-core/src/publish-run.mjs` (124 lines) | `publishRun(runId, runDir, repoRoot, options)` — writes `dashboard/runs/<run_id>.json`, updates `dashboard/runs/index.json`, then runs `git pull --rebase`, `git add dashboard/runs/`, `git commit`, and `git push` unless `dryRun` is set. |
 | `agent-core/src/llm-dispatcher.mjs` (81 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `gemini -p <prompt>` via `spawnSync`, parses JSON, generates workbooks, verifies output. |
 | `agent-core/src/prompts/steel-analysis-prompt.mjs` (33 lines) | `buildAnalysisPrompt(runId, sourceTexts)` — builds the structured Gemini prompt from source `.txt` files. |
 | `agent-core/src/workbook-generator.mjs` (341 lines) | JSON → 3 xlsx files (BoM, MaterialList, Description) via ExcelJS. Entry: `generateWorkbooks(data, outputDir)`. |
 | `agent-core/src/artifact-verifier.mjs` (60 lines) | Verifies run output directory contains required xlsx files. Entry: `verifyRunOutput(runDir)`. |
 | `agent-core/steel-bus/lib/state-machine.mjs` | Pure state machine (no I/O). 17 states from `requested` to `closed`/`dead_letter`. |
+| `dashboard/` | Static Vercel dashboard (`dashboard/vercel.json` uses `@vercel/static`) that loads published run data from `dashboard/runs/index.json` and per-run JSON files. Failed runs render their error message. |
 | `ecosystem.config.cjs` | PM2 process definitions: `steel-orchestrator` (file-bus watcher) and `steel-bot` (Telegram bot). |
 
 ## Owner-Approval Gate (Upload)
@@ -61,7 +62,8 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 - OAuth token path: `/root/.config/codexclaw/secrets/google-oauth-user.json`
 - Bus root: `agent-core/steel-bus/` — `inbox/`, `runs/`, `dead-letter/`
 - Dependencies: `exceljs ^4.4.0`, `googleapis ^171.4.0`, `grammy` (Telegram bot)
-- Required env vars for bot: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (numeric; bot exits if either missing), `GITHUB_TOKEN` (for dashboard auto-push)
+- Required env vars for bot startup: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (numeric; bot exits if either missing)
+- Dashboard auto-publish uses git commands from `publishRun()`; provide GitHub push credentials to the PM2 `steel-bot` environment via `GITHUB_TOKEN`. The helper reports publish failures instead of blocking a successful Drive upload.
 - PM2 launch: `pm2 start ecosystem.config.cjs` starts both `steel-orchestrator` and `steel-bot`
 
 ## Documentation
@@ -72,5 +74,5 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 - Operations: `docs/operations/`
 
 <!-- superflow:onboarded -->
-<!-- updated-by-superflow:2026-05-24 -->
 <!-- sprint:11 -->
+<!-- updated-by-superflow:2026-05-24 -->

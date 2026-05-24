@@ -1,6 +1,6 @@
 {
-  "sprint": 9,
-  "branch": "feat/sprint-9-workbook-generator",
+  "sprint": 10,
+  "branch": "feat/sprint-10-telegram-bot",
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
   "docs_update": "UPDATED",

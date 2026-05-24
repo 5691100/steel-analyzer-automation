@@ -36,6 +36,10 @@
       "type": "string",
       "minLength": 1
     },
+    "project": {
+      "type": "string",
+      "description": "Alias for project_name for workbook-generator"
+    },
     "status": {
       "type": "string",
       "enum": ["complete", "failed"]
@@ -58,6 +62,138 @@
     },
     "workbooks_validated": {
       "type": "boolean"
+    },
+    "subprojects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "totals", "profiles"],
+        "properties": {
+          "name": { "type": "string" },
+          "coating": { "type": "string" },
+          "source_total_kg": { "type": "number" },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "weight_kg", "paint_m2", "qty"],
+              "properties": {
+                "name": { "type": "string" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" },
+                "qty": { "type": "number" },
+                "length_m": { "type": "number" }
+              }
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["profile", "steel_grade", "qty", "length_m", "weight_kg", "paint_m2"],
+              "properties": {
+                "profile": { "type": "string" },
+                "steel_grade": { "type": "string" },
+                "standard": { "type": ["string", "null"] },
+                "qty": { "type": "number" },
+                "length_m": { "type": "number" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" }
+              }
+            }
+          },
+          "source_rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["part", "profile", "steel_grade", "qty", "length_mm", "weight_kg", "paint_m2"],
+              "properties": {
+                "part": { "type": "string" },
+                "profile": { "type": "string" },
+                "steel_grade": { "type": "string" },
+                "standard": { "type": ["string", "null"] },
+                "qty": { "type": "number" },
+                "length_mm": { "type": "number" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" },
+                "source_line": { "type": "string" },
+                "category": { "type": "string" },
+                "area_weight_source": { "type": "string" },
+                "source": { "type": "string" }
+              }
+            }
+          },
+          "assembly_map": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["assembly_no", "part_no", "profile", "steel_grade", "qty", "length_mm", "weight_kg", "paint_m2"],
+              "properties": {
+                "assembly_no": { "type": "string" },
+                "part_no": { "type": "string" },
+                "profile": { "type": "string" },
+                "steel_grade": { "type": "string" },
+                "standard": { "type": ["string", "null"] },
+                "qty": { "type": "number" },
+                "length_mm": { "type": "number" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" },
+                "category": { "type": "string" },
+                "source": { "type": "string" },
+                "source_line": { "type": "string" }
+              }
+            }
+          },
+          "oversize": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["part", "profile", "steel_grade", "qty", "length_mm", "weight_kg", "paint_m2"],
+              "properties": {
+                "part": { "type": "string" },
+                "profile": { "type": "string" },
+                "steel_grade": { "type": "string" },
+                "qty": { "type": "number" },
+                "length_mm": { "type": "number" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" },
+                "area_weight_source": { "type": "string" },
+                "category": { "type": "string" },
+                "source": { "type": "string" },
+                "source_line": { "type": "string" }
+              }
+            }
+          },
+          "totals": {
+            "type": "object",
+            "required": ["weight_kg", "paint_m2"],
+            "properties": {
+              "weight_kg": { "type": "number" },
+              "paint_m2": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subproject", "scope", "reason", "weight_kg", "paint_m2"],
+        "properties": {
+          "subproject": { "type": "string" },
+          "scope": { "type": "string" },
+          "reason": { "type": "string" },
+          "weight_kg": { "type": "number" },
+          "paint_m2": { "type": "number" },
+          "assembly_weight_kg": { "type": "number" },
+          "assembly_paint_m2": { "type": "number" }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": { "type": "string" }
     },
     "outputs": {
       "type": "array",

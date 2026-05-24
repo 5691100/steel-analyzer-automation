@@ -208,7 +208,24 @@ async function list(drive, runId, folderId) {
   return files;
 }
 
-async function download(drive, runId, folderId) {
+export function mergeDownloadManifest(existing, next) {
+  if (!existing || existing.run_id !== next.run_id || !Array.isArray(existing.items)) {
+    return next;
+  }
+  const items = [
+    ...existing.items,
+    ...(next.items || []),
+  ];
+  return {
+    ...existing,
+    ...next,
+    started_at: existing.started_at || next.started_at,
+    ended_at: next.ended_at,
+    items,
+  };
+}
+
+export async function download(drive, runId, folderId) {
   const files = await list(drive, runId, folderId);
   const sourcesDir = join(RUNS_DIR, runId, 'sources');
   if (!fs.existsSync(sourcesDir)) fs.mkdirSync(sourcesDir, { recursive: true });
@@ -246,10 +263,21 @@ async function download(drive, runId, folderId) {
     });
   }
 
-  atomicWriteJson(manifestPath, {
+  const payload = {
     run_id: runId, drive_folder_id: folderId, started_at: startedAt,
     ended_at: new Date().toISOString(), items
-  });
+  };
+
+  let finalPayload = payload;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      finalPayload = mergeDownloadManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')), payload);
+    } catch (err) {
+      console.warn(`Warning: Could not read existing manifest for merging: ${err.message}`);
+    }
+  }
+
+  atomicWriteJson(manifestPath, finalPayload);
   console.log(`Manifest written to ${manifestPath}`);
 }
 

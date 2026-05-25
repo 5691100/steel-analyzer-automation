@@ -95,11 +95,20 @@ export async function dispatchOpenChatQuestion(runId, gateId, question, agent, {
 
   const prompt = `Steel Analyzer run: ${runId}\nGate: ${gateId}\nOwner question: ${question}\n\nAnswer concisely in the same language as the question.`;
 
-  const result = spawn(cli, ['-p', '-'], {
-    input: prompt,
-    timeout: 120_000,
-    encoding: 'utf8',
-  });
+  let result;
+  if (cli === 'codex') {
+    result = spawn('codex', ['exec', '-'], {
+      input: prompt,
+      timeout: 120_000,
+      encoding: 'utf8',
+    });
+  } else {
+    result = spawn(cli, ['-p', '-'], {
+      input: prompt,
+      timeout: 120_000,
+      encoding: 'utf8',
+    });
+  }
 
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';

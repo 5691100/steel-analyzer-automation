@@ -75,7 +75,7 @@ agent-core/
     telegram-bot.mjs                  grammy bot, /run /status /cancel + approve/reject + dashboard publish (208 lines)
     pipeline-runner.mjs               runPipeline(): download -> analysis -> QA -> approval (90 lines)
     llm-dispatcher.mjs                dispatchGeminiAnalysis() via spawnSync gemini (81 lines)
-    publish-run.mjs                   publishRun(): writes dashboard/runs JSON and pushes dashboard data (124 lines)
+    publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     prompts/
       steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini (33 lines)
     workbook-generator.mjs            JSON -> xlsx via ExcelJS (341 lines)

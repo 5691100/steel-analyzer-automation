@@ -4,6 +4,7 @@
   "technical_review": "APPROVE",
   "docs_update": "UPDATED",
   "docs_review": "PASS",
-  "provider": "split-focus",
-  "ts": "2026-05-24T14:30:00Z"
+  "provider": "codex",
+  "ts": "2026-05-25T08:55:00.000Z",
+  "notes": "Round 6 technical review. Fixes: Basic auth for GITHUB_TOKEN (push+pull), step-aware cleanup (reset HEAD~1/reset HEAD), surgical git clean scoped to publishedPath+indexPath."
 }

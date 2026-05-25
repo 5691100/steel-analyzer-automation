@@ -198,6 +198,7 @@ describe('publishRun', () => {
       'add dashboard/runs/',
       'commit -m chore(runs): add run push-fails',
       'push',
+      'reset HEAD~1',
       'checkout -- dashboard/runs/',
     ]);
   });
@@ -234,9 +235,10 @@ describe('publishRun', () => {
 
     await publishRun('token-test', runDir, repoRoot, { spawnSyncFn });
 
+    const encoded = Buffer.from('x-access-token:test-token').toString('base64');
     const pushCall = calls.find((c) => c.includes('push'));
     assert.ok(pushCall.includes('-c'), 'Push should include -c');
-    assert.ok(pushCall.includes('http.extraheader=Authorization: Bearer test-token'));
+    assert.ok(pushCall.includes(`http.extraheader=Authorization: Basic ${encoded}`));
 
     delete process.env.GITHUB_TOKEN;
   });

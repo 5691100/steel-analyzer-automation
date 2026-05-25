@@ -165,7 +165,8 @@ export async function poll() {
 
       let { stdout, exitCode } = adapter(task, tempPrompt);
       if (stdout.length > 10 * 1024 * 1024) {
-        stdout = stdout.slice(0, 10 * 1024 * 1024);
+        const half = 5 * 1024 * 1024;
+        stdout = stdout.slice(0, half) + '\n...[truncated]...\n' + stdout.slice(-half);
       }
 
       if (exitCode === 0) {

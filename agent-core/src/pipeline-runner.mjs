@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
 import { dispatchGeminiAnalysis } from './llm-dispatcher.mjs';
+import { resolveGate } from './gate-manager.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -50,6 +51,7 @@ async function askGate(runId, gateId, prompt, notifyFn, makeGateKb, waitForGate,
     return await Promise.race([waitForGate(runId, gateId), timeoutP]);
   } finally {
     clearTimeout(handle);
+    resolveGate(runId, gateId, 'timeout');
   }
 }
 

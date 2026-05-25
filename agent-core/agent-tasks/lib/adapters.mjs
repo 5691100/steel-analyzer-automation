@@ -44,7 +44,16 @@ export function claudeAdapter(task, promptPath) {
 
 export function injectSentinel(promptPath) {
   const content = fs.readFileSync(promptPath, 'utf8');
-  const sentinelBlock = "\n---\nIMPORTANT: End your entire response with a result block in EXACTLY this format.\nNo text after <<<END>>>. Replace ... with your actual JSON:\n<<<POS_RESULT>>>\n{ \"verdict\": \"APPROVE|REQUEST_CHANGES|ACCEPTED|FAIL|ERROR\", \"findings\": [] }\n<<<END>>>\n";
+  const sentinelBlock = `
+---
+IMPORTANT: End your entire response with a result block in EXACTLY this format.
+Fill in your real assessment between the markers. No text after <<<END>>>.
+Allowed verdict values: APPROVE, REQUEST_CHANGES, ACCEPTED, FAIL, ERROR
+Example (outside markers): {"verdict":"APPROVE","findings":[{"message":"..."}]}
+
+<<<POS_RESULT>>>
+<<<END>>>
+`;
   const tempPath = path.join(
     path.dirname(promptPath),
     'sentinel-' + crypto.randomBytes(6).toString('hex') + '.tmp'

@@ -27,9 +27,12 @@ bot.api.config.use((prev, method, payload, signal) => {
 });
 
 describe('Telegram Bot Logic', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     bot.botInfo = { id: 1, is_bot: true, first_name: 'SteelBot', username: 'steel_bot', can_join_groups: true, can_read_all_group_messages: false, supports_inline_queries: false };
     sentMessages.length = 0; // Clear the array
+    const { pendingGates, chatQuestionState } = await import("../src/gate-manager.mjs");
+    pendingGates.clear();
+    chatQuestionState.clear();
   });
 
   afterEach(() => {
@@ -366,7 +369,7 @@ describe('Telegram Bot Logic', () => {
     });
 
     const reply = sentMessages.find(m => m.text.includes(runId));
-    assert.ok(reply, 'should reply with run status');
+    console.log("SENT MESSAGES:", sentMessages); assert.ok(reply, 'should reply with run status');
     assert.ok(reply.text.includes('Запрос принят') || reply.text.includes('run-request'),
       `should contain human label; got: ${reply.text}`);
     assert.ok(reply.text.includes('Анализ завершён') || reply.text.includes('run-complete'),

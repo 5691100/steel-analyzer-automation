@@ -6,12 +6,12 @@ import { generateWorkbooks } from './workbook-generator.mjs';
 import { verifyRunOutput } from './artifact-verifier.mjs';
 
 /**
- * Dispatches the analysis task to Gemini LLM, generates workbooks, and verifies results.
+ * Dispatches the analysis task to Gemini LLM, generateworkbooks, and verifies results.
  * 
  * @param {string} runId
  * @param {string} runDir
- * @param {string} sourcesDir
- * @returns {Promise<Object>} Verification result
+  * @param {string} sourcesDir
+ * @return {Promise<Object>} Verification result
  */
 export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, { 
   spawn = spawnSync,
@@ -25,7 +25,7 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
     sourceTexts[file] = fs.readFileSync(path.join(sourcesDir, file), 'utf8');
   }
 
-  // 2. Formulate prompt
+  // 2, Formulate prompt
   const prompt = buildAnalysisPrompt(runId, sourceTexts);
 
   // 3. Call Gemini
@@ -36,7 +36,7 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   });
 
   if (result.error) {
-    throw new Error(`Gemini dispatch failed for ${runId} (${result.error.message}). stderr: ${result.stderr?.toString().slice(0, 200)}`);
+    throw result.error;
   }
 
   const stdout = result.stdout.trim();
@@ -45,7 +45,7 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   // 4. Parse stdout as JSON
   try {
     // LLMs sometimes wrap JSON in markdown blocks even when told not to.
-    const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+    const jsonMatch = stdout.match(/\{[\s\S]*}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : stdout;
     analysis = JSON.parse(jsonStr);
   } catch (err) {
@@ -78,4 +78,33 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
 
   // 10. Return result
   return vResult;
+}
+
+/**
+ * Dispatches a free-text question from Open-chat mode to the appropriate agent CLI.
+ * @param {string} runId
+ * @param {string} gateId  - e.g. 'g1_gemini', 'g2_qa'
+ * @param {string} question - owner's question text
+ * @param {string} agent   - 'gemini' | 'claude' | 'codex'
+ * @param {{ spawn: Function }} opts
+ * @returns {Promise<string>} agent answer
+ */
+export async function dispatchOpenChatQuestion(runId, gateId, question, agent, { spawn = spawnSync } = {}) {
+  const CLI_MAP = { gemini: 'gemini', claude: 'claude', codex: 'codex' };
+  const cli = CLI_MAP[agent] ?? 'gemini';
+
+  const prompt = `Steel Analyzer run: ${runId}\nGate: ${gateId}\nOwner question: ${question}\n\nAnswer concisely in the same language as the question.`;
+
+  const result = spawn(cli, ['-p', '-'], {
+    input: prompt,
+    timeout: 120_000,
+    encoding: 'utf8',
+  });
+
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';
+    throw new Error(`dispatchOpenChatQuestion failed (${cli}): ${detail}`);
+  }
+
+  return (result.stdout ?? '').trim() || '(no answer)';
 }

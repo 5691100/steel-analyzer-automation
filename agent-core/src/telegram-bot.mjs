@@ -179,7 +179,7 @@ bot.command('run', async (ctx) => {
 
 // Command: /status <run_id>
 bot.command('status', async (ctx) => {
-  const runId = ctx.match.trim(); console.log("STATUS DEBUG: runId=", runId);
+  const runId = ctx.match.trim();
   if (!runId) return ctx.reply('Usage: /status <run_id>');
 
   const ledgerPath = join(RUNS_DIR, runId, 'ledger.jsonl');
@@ -215,7 +215,7 @@ bot.command('status', async (ctx) => {
 
 // Command: /cancel <run_id>
 bot.command('cancel', async (ctx) => {
-  const runId = ctx.match.trim(); console.log("STATUS DEBUG: runId=", runId);
+  const runId = ctx.match.trim();
   if (!runId) return ctx.reply('Usage: /cancel <run_id>');
 
   logSignal(runId, { schema: 'steel.run-cancelled.v1', run_id: runId, reason: 'User cancelled via bot' });

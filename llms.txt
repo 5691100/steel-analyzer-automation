@@ -1,28 +1,32 @@
 # steel-analyzer-automation
 
-Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs Gemini-based extraction, generates Excel workbooks, performs Claude QA review, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
+Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs Gemini-based extraction, generates Excel workbooks, performs QA review, integrates via CodexClaw, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
 
 ## Stack
 
-- Runtime: Node.js (ESM, `"type": "module"`)
-- Key libraries: `exceljs ^4.4.0`, `googleapis ^171.4.0`, `grammy` (Telegram)
-- Dashboard: static Vercel app via `@vercel/static`
+- Runtime: Node.js (ESM, "type": "module")
+- Key libraries: exceljs ^4.4.0, googleapis ^171.4.0, grammy (Telegram)
+- Dashboard: static Vercel app via @vercel/static
 - No n8n in this pipeline
 
 ## Architecture
 
 ```
-telegram-bot.mjs (/run command, TELEGRAM_CHAT_ID gate)
-  -> pipeline-runner.mjs (runPipeline)
+telegram-bot.mjs (Drive-link intake, /run, /status, /cancel, Open-chat mode)
+  -> pipeline-runner.mjs (runPipeline, 5-gate flow, maxCorrections=3)
       -> steel-drive.mjs download (User OAuth, MD5-verified)
-      -> llm-dispatcher.mjs (dispatchGeminiAnalysis via spawnSync gemini)
+      -> llm-dispatcher.mjs (Gemini analysis, Open-chat dispatch)
           -> steel-analysis-prompt.mjs (buildAnalysisPrompt)
           -> workbook-generator.mjs (JSON -> 3 xlsx)
           -> artifact-verifier.mjs (output check)
-      -> dispatchClaudeQA (stub in Sprint 10, auto-ACCEPTED)
-      -> Telegram inline buttons: approve_upload / reject_upload
-  -> steel-drive.mjs upload (owner-approval token required)
-  -> publish-run.mjs (writes dashboard/runs JSON, updates index, git pull/add/commit/push)
+      -> Gate Registry (gate-manager.mjs):
+          - G1: Gemini (Approve/Reject/Defer/Clarify/Open-chat)
+          - G2: QA Review
+          - G3: Correction Loop (up to 3 attempts)
+          - G4: CodexClaw Integration
+          - G5: Final Upload Approval
+  -> steel-drive.mjs upload (inside pipeline or via token)
+  -> publish-run.mjs (writes dashboard/runs JSON, git pull/commit/push)
 
 Failure publishing:
 - Pipeline crashes publish a failed dashboard entry with the crash message.
@@ -30,7 +34,7 @@ Failure publishing:
 - Owner rejections log steel.upload-rejected.v1 and publish a failed dashboard entry.
 
 steel-orchestrator.mjs (file-bus watcher, PM2) -- parallel long-running process
-ecosystem.config.cjs -- PM2 config: steel-bot + steel-orchestrator; steel-bot receives GITHUB_TOKEN for dashboard push credentials
+ecosystem.config.cjs -- PM2 config: steel-bot + steel-orchestrator + agent-tasks-daemon
 dashboard/ -- static Vercel app loading dashboard/runs/index.json and per-run JSON files
 ```
 
@@ -72,9 +76,10 @@ agent-core/
     steel-drive.mjs                   Drive wrapper (799 lines)
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
-    telegram-bot.mjs                  grammy bot, /run /status /cancel + approve/reject + dashboard publish (208 lines)
-    pipeline-runner.mjs               runPipeline(): download -> analysis -> QA -> approval (90 lines)
-    llm-dispatcher.mjs                dispatchGeminiAnalysis() via spawnSync gemini (81 lines)
+    telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
+    pipeline-runner.mjs               runPipeline(): 5-gate flow (Gemini, QA, Correction, Codex, Upload) (220 lines)
+    gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
+    llm-dispatcher.mjs                dispatchGeminiAnalysis(), dispatchOpenChatQuestion() (119 lines)
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     prompts/
       steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini (33 lines)
@@ -112,5 +117,5 @@ docs/
 
 `requested` -> `sources_manifested` -> `sources_downloaded` -> `extraction_done` -> `workbooks_generated` -> `workbooks_validated` -> `producer_handoff_done` -> `claude_review_requested` -> `claude_review_passed` | `claude_review_blocked` -> `codex_integration_requested` -> `codex_integration_done` -> `gepa_proposed` -> `gepa_reviewed` -> `upload_ready` -> `uploaded_verified` -> `closed` | `dead_letter`
 
-<!-- sprint:12 -->
+<!-- sprint:13 -->
 <!-- updated-by-superflow:2026-05-25 -->

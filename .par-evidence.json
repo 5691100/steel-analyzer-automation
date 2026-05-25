@@ -1,10 +1,9 @@
 {
-  "sprint": 12,
+  "sprint": 13,
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
   "docs_update": "UPDATED",
   "docs_review": "PASS",
   "provider": "codex",
-  "ts": "2026-05-25T11:30:00.000Z",
-  "notes": "4 rounds of Codex review. Round 1-2: sentinel last-match, ARG_MAX stdin fix, atomic claim, dry_run dispatch, dead-letter state writes. Round 3: sentinel template example JSON outside markers, claiming recovery before RUNNING guard. Round 4: APPROVE."
+  "ts": "2026-05-25T17:00:00.000Z"
 }

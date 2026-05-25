@@ -15,26 +15,25 @@ cd agent-core && npm test
 # Expands to: node --test test/*.test.mjs
 ```
 
-Test files: `agent-core/test/*.test.mjs`
 
+Test files: `agent-core/test/*.test.mjs`
 ## Key Entry Points
 
 | File | Purpose |
 |------|---------|
 | `agent-core/scripts/steel-drive.mjs` (799 lines) | Google Drive list/download/upload with MD5 verification and atomic manifests. Uses User OAuth only — no Service Account fallback. |
 | `agent-core/scripts/steel-orchestrator.mjs` (843 lines) | File-bus watcher. Watches `steel-bus/inbox/`, drives state transitions, calls steel-drive and external CLIs. |
-| `agent-core/src/telegram-bot.mjs` (208 lines) | grammy Telegram bot. Commands: `/run <run_id> <folder_id>`, `/status <run_id>`, `/cancel <run_id>`. Inline buttons: `approve_upload`, `reject_upload`. Security: `TELEGRAM_CHAT_ID` gate on every update. Publishes dashboard run JSON after successful upload, upload failure, pipeline crash, or owner rejection. |
-| `agent-core/src/pipeline-runner.mjs` (90 lines) | `runPipeline(runId, folderId, notifyFn)` — orchestrates download → Gemini analysis → Claude QA → Telegram approval prompt. |
+| `agent-core/src/telegram-bot.mjs` (320 lines) | grammy Telegram bot. Drive-link intake (paste URL → auto run_id), 5-gate approval flow (G1-G5) with Approve/Reject/Defer/Clarify/Open-chat buttons, Open-chat Q&A mode, improved /status with ledger state. Security: `TELEGRAM_CHAT_ID` gate. |
+| `agent-core/src/pipeline-runner.mjs` (220 lines) | `runPipeline(runId, folderId, notifyFn)` — 5-gate pipeline (G1:Gemini, G2:QA, G3:correction loop ×3, G4:CodexClaw, G5:upload), upload inside pipeline. |
+| `agent-core/src/gate-manager.mjs` (62 lines) | Pending gate registry (pendingGates Map), InlineKeyboard factory, resolveGate, GATE_AGENT/GATE_PROMPTS/GATE_HELP constants. |
 | `agent-core/src/publish-run.mjs` (161 lines) | `publishRun(runId, runDir, repoRoot, options)` — writes `dashboard/runs/<run_id>.json`, updates `dashboard/runs/index.json`, then runs `git pull --rebase` (with Basic auth if `GITHUB_TOKEN` set), `git add dashboard/runs/`, `git commit`, and `git push` unless `dryRun` is set. On failure: step-aware rollback (`reset HEAD~1` for push, `reset HEAD --` for commit) + `git clean` scoped to the two written files. |
-| `agent-core/src/llm-dispatcher.mjs` (81 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `gemini -p <prompt>` via `spawnSync`, parses JSON, generates workbooks, verifies output. |
+| `agent-core/src/llm-dispatcher.mjs` (119 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `gemini -p <prompt>` via `spawnSync`, parses JSON, generates workbooks, verifies output. Also `dispatchOpenChatQuestion`. |
 | `agent-core/src/prompts/steel-analysis-prompt.mjs` (33 lines) | `buildAnalysisPrompt(runId, sourceTexts)` — builds the structured Gemini prompt from source `.txt` files. |
 | `agent-core/src/workbook-generator.mjs` (341 lines) | JSON → 3 xlsx files (BoM, MaterialList, Description) via ExcelJS. Entry: `generateWorkbooks(data, outputDir)`. |
 | `agent-core/src/artifact-verifier.mjs` (60 lines) | Verifies run output directory contains required xlsx files. Entry: `verifyRunOutput(runDir)`. |
 | `agent-core/steel-bus/lib/state-machine.mjs` | Pure state machine (no I/O). 17 states from `requested` to `closed`/`dead_letter`. |
 | `dashboard/` | Static Vercel dashboard (`dashboard/vercel.json` uses `@vercel/static`) that loads published run data from `dashboard/runs/index.json` and per-run JSON files. Failed runs render their error message. |
 | `ecosystem.config.cjs` | PM2 process definitions: `steel-orchestrator` (file-bus watcher) and `steel-bot` (Telegram bot). |
-
-## Owner-Approval Gate (Upload)
 
 Upload is blocked until an exact token is provided:
 
@@ -86,5 +85,5 @@ dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `resu
 - Operations: `docs/operations/`
 
 <!-- superflow:onboarded -->
-<!-- sprint:12 -->
+<!-- sprint:13 -->
 <!-- updated-by-superflow:2026-05-25 -->

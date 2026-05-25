@@ -31,8 +31,7 @@ let upload = driveUpload;
 let publishRun = defaultPublishRun;
 let runPipeline = defaultRunPipeline;
 
-const DRIVE_URL_RE =
-  /drive\.google\.com\/(?:drive\/folders\/|folderview\?(?:[^#]*&)?id=)([A-Za-z0-9_-]+)/;
+const DRIVE_URL_RE = /drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|folderview\?(?:[^#]*&)?id=|open\?(?:[^#]*&)?id=)([A-Za-z0-9_-]+)/;
 
 function generateRunId() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -83,9 +82,14 @@ bot.on('message:text', async (ctx, next) => {
   // 1. Open chat question mode takes priority
   const qstate = chatQuestionState.get(ctx.chat.id);
   if (qstate) {
+    const questionText = ctx.message.text.trim();
+    if (DRIVE_URL_RE.test(questionText) || questionText.includes('drive.google.com')) {
+      await ctx.reply('💡 Похоже, это ссылка на Drive. Сначала завершите текущий чат: ответьте на вопрос или нажмите ❌ Reject на воротах.');
+      return;
+    }
     const { runId, gateId, agent } = qstate;
     chatQuestionState.delete(ctx.chat.id);
-    const question = ctx.message.text;
+    const question = questionText;
     await ctx.reply('⏳ Передаю вопрос агенту...');
     try {
       const answer = await dispatchOpenChatQuestion(runId, gateId, question, agent);
@@ -103,7 +107,13 @@ bot.on('message:text', async (ctx, next) => {
 
   // 2. Drive URL intake
   const m = ctx.message.text.match(DRIVE_URL_RE);
-  if (!m) return next();
+  if (!m) {
+    if (ctx.message.text.includes('drive.google.com')) {
+      await ctx.reply('⚠️ Ссылка на Drive не распознана. Поддерживаемый формат:\nhttps://drive.google.com/drive/folders/<id>');
+      return;
+    }
+    return next();
+  }
 
   const folderId = m[1];
   const runId = generateRunId();
@@ -218,6 +228,13 @@ bot.command('cancel', async (ctx) => {
   const runId = ctx.match.trim();
   if (!runId) return ctx.reply('Usage: /cancel <run_id>');
 
+  if (pendingGates.has(runId)) {
+    const { gateId } = pendingGates.get(runId);
+    resolveGate(runId, gateId, 'reject');
+    await ctx.reply(`⛔ Run <code>${runId}</code> отменён — активный gate <code>${gateId}</code> отклонён.`, { parse_mode: 'HTML' });
+    return;
+  }
+
   logSignal(runId, { schema: 'steel.run-cancelled.v1', run_id: runId, reason: 'User cancelled via bot' });
   ctx.reply(`⚠️ Cancellation flag recorded. Current pipeline step will still complete.
 Approve/Reject buttons will appear — tap Reject to block upload.`);
@@ -234,9 +251,8 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
     return;
   }
 
-  await ctx.answerCallbackQuery();
-
   if (decision === 'openchat') {
+    await ctx.answerCallbackQuery();
     const agent = GATE_AGENT[gateId] ?? 'gemini';
     chatQuestionState.set(ctx.chat.id, { runId, gateId, agent });
     await ctx.editMessageText(
@@ -248,6 +264,7 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
   }
 
   if (decision === 'clarify') {
+    await ctx.answerCallbackQuery();
     const help = GATE_HELP[gateId] ?? 'Нет описания для этого шага.';
     await ctx.reply(`ℹ️ ${help}\n\nВыберите действие:`, {
       reply_markup: makeGateKeyboard(runId, gateId),
@@ -256,6 +273,7 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
   }
 
   if (decision === 'defer') {
+    await ctx.answerCallbackQuery();
     await ctx.editMessageText(
       `⏸ Отложено. Кнопки вернутся через 10 минут для run <code>${runId}</code>.`,
       { parse_mode: 'HTML' }
@@ -275,6 +293,8 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
     await ctx.answerCallbackQuery({ text: 'Gate expired or not found', show_alert: true });
     return;
   }
+
+  await ctx.answerCallbackQuery();
 
   const label = decision === 'approve' ? `✅ ${gateId} одобрено` : `❌ ${gateId} отклонено`;
   await ctx.editMessageText(`${label}\nRun: <code>${runId}</code>`, { parse_mode: 'HTML' });

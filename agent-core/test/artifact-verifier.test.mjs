@@ -32,9 +32,9 @@ describe('Artifact Verifier', () => {
   it('should return error if workbooks are too small', () => {
     const outputDir = path.join(tempDir, 'output');
     fs.mkdirSync(outputDir);
-    fs.writeFileSync(path.join(outputDir, 'BoM_test.xlsx'), 'small');
-    fs.writeFileSync(path.join(outputDir, 'Material_List_test.xlsx'), 'small');
-    fs.writeFileSync(path.join(outputDir, 'Description_test.xlsx'), 'small');
+    fs.writeFileSync(path.join(outputDir, 'test_BoM.xlsx'), 'small');
+    fs.writeFileSync(path.join(outputDir, 'test_MaterialList.xlsx'), 'small');
+    fs.writeFileSync(path.join(outputDir, 'test_Description.xlsx'), 'small');
 
     const result = verifyRunOutput(tempDir);
     assert.strictEqual(result.ok, false);
@@ -45,14 +45,27 @@ describe('Artifact Verifier', () => {
   it('should pass if all workbooks are present and valid size', () => {
     const outputDir = path.join(tempDir, 'output');
     fs.mkdirSync(outputDir);
-    const largeData = Buffer.alloc(6000, 'a');
-    fs.writeFileSync(path.join(outputDir, 'BoM_test.xlsx'), largeData);
-    fs.writeFileSync(path.join(outputDir, 'Material_List_test.xlsx'), largeData);
-    fs.writeFileSync(path.join(outputDir, 'Description_test.xlsx'), largeData);
+    const validData = Buffer.alloc(1100, 'a');
+    fs.writeFileSync(path.join(outputDir, 'test_BoM.xlsx'), validData);
+    fs.writeFileSync(path.join(outputDir, 'test_MaterialList.xlsx'), validData);
+    fs.writeFileSync(path.join(outputDir, 'test_Description.xlsx'), validData);
 
     const result = verifyRunOutput(tempDir);
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.files.length, 3);
     assert.strictEqual(result.errors.length, 0);
+  });
+
+  it('should pass with versioned filenames', () => {
+    const outputDir = path.join(tempDir, 'output');
+    fs.mkdirSync(outputDir);
+    const validData = Buffer.alloc(1100, 'a');
+    fs.writeFileSync(path.join(outputDir, 'test_BoM_v2.xlsx'), validData);
+    fs.writeFileSync(path.join(outputDir, 'test_MaterialList_v3.xlsx'), validData);
+    fs.writeFileSync(path.join(outputDir, 'test_Description_v1.xlsx'), validData);
+
+    const result = verifyRunOutput(tempDir);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.files.length, 3);
   });
 });

@@ -19,3 +19,5 @@ agent-core/steel-bus/runs/*/logs/
 agent-core/steel-bus/runs/*/qa/
 agent-core/steel-bus/runs/*/processed-signals/
 .superflow-state.json
+debug-output/
+agent-core/test/debug-headers.mjs

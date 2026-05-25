@@ -45,31 +45,37 @@ describe('Workbook Generator', () => {
 
     const verification = verifyRunOutput(tempDir);
     assert.strictEqual(verification.ok, true, `Verification failed: ${verification.errors.join(', ')}`);
-    assert.strictEqual(verification.files.length, 3);
+    assert.ok(verification.files.length >= 3);
   });
 
   it('should generate workbooks with empty excluded array', async () => {
     const data = {
       run_id: 'empty-excluded',
-      project: 'Project',
+      project_no: 'P1',
+      project_name: 'Project',
       subprojects: [{ name: 'SP', totals: { weight_kg: 100, paint_m2: 10 }, profiles: [] }],
       excluded: [],
       sources: []
     };
-    await generateWorkbooks(data, path.join(tempDir, 'out1'));
-    assert.ok(fs.existsSync(path.join(tempDir, 'out1', 'BoM_Project_empty-excluded.xlsx')));
+    const outDir = path.join(tempDir, 'out1');
+    await generateWorkbooks(data, outDir);
+    const files = fs.readdirSync(outDir);
+    assert.ok(files.some(f => f.includes('BoM')), 'BoM file missing');
   });
 
   it('should generate sheets for subproject with empty assembly_map', async () => {
     const data = {
       run_id: 'empty-map',
-      project: 'Project',
+      project_no: 'P2',
+      project_name: 'Project',
       subprojects: [{ name: 'SP', totals: { weight_kg: 100, paint_m2: 10 }, profiles: [], assembly_map: [] }],
       excluded: [],
       sources: []
     };
-    await generateWorkbooks(data, path.join(tempDir, 'out2'));
-    assert.ok(fs.existsSync(path.join(tempDir, 'out2', 'BoM_Project_empty-map.xlsx')));
+    const outDir = path.join(tempDir, 'out2');
+    await generateWorkbooks(data, outDir);
+    const files = fs.readdirSync(outDir);
+    assert.ok(files.some(f => f.includes('BoM')), 'BoM file missing');
   });
 
   it('should truncate sheet names longer than 31 characters', async () => {

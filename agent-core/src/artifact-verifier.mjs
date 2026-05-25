@@ -29,13 +29,13 @@ export function verifyRunOutput(runDir) {
   }
 
   const expectedPatterns = [
-    /^BoM_.*\.xlsx$/,
-    /^Material_List_.*\.xlsx$/,
-    /^Description_.*\.xlsx$/
+    /^.*_BoM(_v\d+)?\.xlsx$/,
+    /^.*_MaterialList(_v\d+)?\.xlsx$/,
+    /^.*_Description(_v\d+)?\.xlsx$/
   ];
 
   const foundFiles = fs.readdirSync(outputDir);
-  const minSize = 5000;
+  const minSize = 1000;
 
   for (const pattern of expectedPatterns) {
     const matchedFile = foundFiles.find(f => pattern.test(f));

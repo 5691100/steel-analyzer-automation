@@ -106,7 +106,12 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
 
   // Fix 4a: Rebase early (before writing files) to avoid dirty tree issues
   if (!options.dryRun) {
-    const pullResult = runGit(spawnSyncFn, repoRoot, ['pull', '--rebase']);
+    const pullArgs = ['pull', '--rebase'];
+    if (process.env.GITHUB_TOKEN) {
+      const encoded = Buffer.from(`x-access-token:${process.env.GITHUB_TOKEN}`).toString('base64');
+      pullArgs.unshift('-c', `http.extraheader=Authorization: Basic ${encoded}`);
+    }
+    const pullResult = runGit(spawnSyncFn, repoRoot, pullArgs);
     if (pullResult.status !== 0) {
       return { ok: false, error: 'rebase failed' };
     }
@@ -125,7 +130,8 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
     // Fix 3: Use GITHUB_TOKEN for push if available
     const pushArgs = ['push'];
     if (process.env.GITHUB_TOKEN) {
-      pushArgs.unshift('-c', `http.extraheader=Authorization: Bearer ${process.env.GITHUB_TOKEN}`);
+      const encoded = Buffer.from(`x-access-token:${process.env.GITHUB_TOKEN}`).toString('base64');
+      pushArgs.unshift('-c', `http.extraheader=Authorization: Basic ${encoded}`);
     }
 
     for (const args of [
@@ -136,6 +142,11 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
       const result = runGit(spawnSyncFn, repoRoot, args);
       if (result.status !== 0) {
         // Fix 4b: Clean up written files on failure so next attempt isn't dirty
+        if (args[0] === 'push') {
+          runGit(spawnSyncFn, repoRoot, ['reset', 'HEAD~1']);
+        } else if (args[0] === 'commit') {
+          runGit(spawnSyncFn, repoRoot, ['reset', 'HEAD', '--', 'dashboard/runs/']);
+        }
         runGit(spawnSyncFn, repoRoot, ['checkout', '--', 'dashboard/runs/']);
         return { ok: false, error: gitFailure(result, `git ${args[0]} failed`) };
       }

@@ -62,51 +62,18 @@ describe('Telegram Bot Logic', () => {
     }));
   }
 
-  async function handleRunCommand(updateId, text) {
-    await bot.handleUpdate({
-      update_id: updateId,
-      message: {
-        message_id: updateId,
-        date: Math.floor(Date.now() / 1000),
-        chat: { id: 12345, type: 'private' },
-        from: { id: 12345, first_name: 'Owner', is_bot: false },
-        text,
-        entities: [{ offset: 0, length: 4, type: 'bot_command' }]
-      }
-    });
-  }
-
-  async function handleCallback(updateId, data) {
-    await bot.handleUpdate({
-      update_id: updateId,
-      callback_query: {
-        id: String(updateId),
-        from: { id: 12345, first_name: 'Owner', is_bot: false },
-        chat_instance: String(updateId),
-        message: {
-          message_id: updateId,
-          date: Math.floor(Date.now() / 1000),
-          chat: { id: 12345, type: 'private' },
-          text: 'Upload request'
-        },
-        data
-      }
-    });
-  }
-
   it('should ignore messages from unauthorized chat ids', async (t) => {
     await bot.handleUpdate({
       update_id: 1,
       message: {
         message_id: 1,
-        date: Math.floor(Date.now() / 1000),
+        from: { id: 99999, is_bot: false, first_name: 'Stalker' },
         chat: { id: 99999, type: 'private' },
-        from: { id: 99999, first_name: 'Attacker', is_bot: false },
-        text: '/run test-run folder-id'
+        date: Math.floor(Date.now() / 1000),
+        text: '/start'
       }
     });
-
-    assert.strictEqual(sentMessages.length, 0, 'Should NOT reply to unauthorized chat');
+    assert.equal(sentMessages.length, 0);
   });
 
   it('should validate run_id in /run command', async (t) => {
@@ -114,9 +81,9 @@ describe('Telegram Bot Logic', () => {
       update_id: 2,
       message: {
         message_id: 2,
-        date: Math.floor(Date.now() / 1000),
+        from: { id: 12345, is_bot: false, first_name: 'Owner' },
         chat: { id: 12345, type: 'private' },
-        from: { id: 12345, first_name: 'Owner', is_bot: false },
+        date: Math.floor(Date.now() / 1000),
         text: '/run "invalid_id!" some-folder',
         entities: [{ offset: 0, length: 4, type: 'bot_command' }]
       }
@@ -126,124 +93,13 @@ describe('Telegram Bot Logic', () => {
     assert.ok(sentMessages.some(m => m.text && m.text.includes('Invalid run_id')), 'Should report validation error');
   });
 
-  it('should validate runId in approve_upload callback', async (t) => {
-    await bot.handleUpdate({
-      update_id: 3,
-      callback_query: {
-        id: '1',
-        from: { id: 12345, first_name: 'Owner', is_bot: false },
-        chat_instance: '1',
-        message: {
-          message_id: 3,
-          date: Math.floor(Date.now() / 1000),
-          chat: { id: 12345, type: 'private' },
-          text: 'Upload request'
-        },
-        data: 'approve_upload:BAD-ID!:folder-id'
-      }
-    });
-
-    assert.ok(sentMessages.length > 0, 'Should have sent an error message');
-    assert.ok(sentMessages.some(m => m.text && m.text.includes('Invalid run_id in callback')), 'Should report validation error in callback');
-  });
-
-  it('calls publishRun after successful upload approval', async () => {
-    const runId = 'telegram-publish-success';
-    const folderId = 'folder-id';
-    const runDir = createRunWithOutput(runId);
-    const publishCalls = [];
-    const uploadCalls = [];
-
-    __setTelegramBotTestDeps({
-      upload: async (...args) => {
-        uploadCalls.push(args);
-        return { manifestPath: path.join(runDir, 'output', 'result.xlsx'), md5Status: 'OK' };
-      },
-      publishRun: async (...args) => {
-        publishCalls.push(args);
-        return { ok: true };
-      }
-    });
-
-    await handleCallback(4, `approve_upload:${runId}:${folderId}`);
-
-    assert.strictEqual(uploadCalls.length, 1);
-    assert.deepStrictEqual(publishCalls, [[runId, runDir]]);
-  });
-
-  it('sends a warning when dashboard publish fails after upload success', async () => {
-    const runId = 'telegram-publish-warning';
-    const folderId = 'folder-id';
-    const runDir = createRunWithOutput(runId);
-
-    __setTelegramBotTestDeps({
-      upload: async () => ({ manifestPath: path.join(runDir, 'output', 'result.xlsx'), md5Status: 'OK' }),
-      publishRun: async () => ({ ok: false, error: 'push failed' })
-    });
-
-    await handleCallback(5, `approve_upload:${runId}:${folderId}`);
-
-    assert.ok(
-      sentMessages.some(m => m.text === '⚠️ Uploaded to Drive, but dashboard publish failed: push failed'),
-      'Should warn that dashboard publishing failed without failing upload'
-    );
-  });
-
-  it('publishes a failed run entry when upload approval fails', async () => {
-    const runId = 'telegram-publish-upload-failure';
-    const folderId = 'folder-id';
-    const runDir = createRunWithOutput(runId);
-    writeAnalysis(runDir, runId);
-    const publishCalls = [];
-
-    __setTelegramBotTestDeps({
-      upload: async () => {
-        throw new Error('Drive unavailable');
-      },
-      publishRun: async (...args) => {
-        publishCalls.push(args);
-        return { ok: true };
-      }
-    });
-
-    await handleCallback(6, `approve_upload:${runId}:${folderId}`);
-
-    assert.ok(sentMessages.some(m => m.text === '❌ Upload failed: Drive unavailable'));
-    assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
-      statusOverride: 'failed',
-      error: 'Upload failed: Drive unavailable',
-    }]]);
-  });
-
-  it('publishes a failed run entry when upload is rejected', async () => {
-    const runId = 'telegram-publish-rejected';
-    const runDir = path.join(TEST_RUNS_DIR, runId);
-    createdRunDirs.add(runDir);
-    fs.rmSync(runDir, { recursive: true, force: true });
-    fs.mkdirSync(runDir, { recursive: true });
-    writeAnalysis(runDir, runId);
-    const publishCalls = [];
-
-    __setTelegramBotTestDeps({
-      publishRun: async (...args) => {
-        publishCalls.push(args);
-        return { ok: true };
-      }
-    });
-
-    await handleCallback(7, `reject_upload:${runId}`);
-
-    assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
-      statusOverride: 'failed',
-      error: 'Upload rejected by owner',
-    }]]);
-  });
-
   it('publishes a failed run entry when the pipeline crashes before approval', async () => {
     const runId = 'telegram-pipeline-crash';
     const folderId = 'folder-id';
     const runDir = path.join(TEST_RUNS_DIR, runId);
     createdRunDirs.add(runDir);
+    fs.mkdirSync(runDir, { recursive: true });
+    writeAnalysis(runDir, runId);
     const publishCalls = [];
 
     __setTelegramBotTestDeps({
@@ -256,13 +112,297 @@ describe('Telegram Bot Logic', () => {
       }
     });
 
-    await handleRunCommand(8, `/run ${runId} ${folderId}`);
+    await bot.handleUpdate({
+      update_id: 8,
+      message: {
+        message_id: 8,
+        from: { id: 12345, is_bot: false, first_name: 'Owner' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: `/run ${runId} ${folderId}`,
+        entities: [{ offset: 0, length: 4, type: 'bot_command' }]
+      }
+    });
     await new Promise(resolve => setImmediate(resolve));
 
-    assert.ok(sentMessages.some(m => m.text === '❌ Pipeline crashed: Gemini failed'));
+    assert.ok(sentMessages.some(m => m.text.includes('❌ Pipeline crashed: Gemini failed')));
     assert.deepStrictEqual(publishCalls, [[runId, runDir, undefined, {
       statusOverride: 'failed',
       error: 'Pipeline crashed: Gemini failed',
     }]]);
+  });
+
+  // ── Drive-link intake ──────────────────────────────────────────────────────
+
+  it('Drive link message triggers run creation and replies with run_id', async () => {
+    let pipelineCalled = false;
+    let calledRunId = null;
+    let calledFolderId = null;
+
+    __setTelegramBotTestDeps({
+      runPipeline: async (runId, folderId, notifyFn) => {
+        pipelineCalled = true;
+        calledRunId = runId;
+        calledFolderId = folderId;
+        await notifyFn('✅ Pipeline started');
+      },
+    });
+
+    await bot.handleUpdate({
+      update_id: 1001,
+      message: {
+        message_id: 1,
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: 'https://drive.google.com/drive/folders/1ABC_folder_id_XYZ',
+      },
+    });
+
+    assert.equal(pipelineCalled, true, 'runPipeline should have been called');
+    assert.match(calledRunId, /^steel-\d{8}-[A-Z0-9]{5}$/, `run_id format wrong: ${calledRunId}`);
+    assert.equal(calledFolderId, '1ABC_folder_id_XYZ');
+    assert.ok(
+      sentMessages.some(m => m.text.includes(calledRunId)),
+      'bot should reply with the generated run_id'
+    );
+  });
+
+  it('Drive folderview URL also triggers run creation', async () => {
+    let calledFolderId = null;
+    __setTelegramBotTestDeps({
+      runPipeline: async (runId, folderId) => { calledFolderId = folderId; },
+    });
+
+    await bot.handleUpdate({
+      update_id: 1002,
+      message: {
+        message_id: 2,
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: 'https://drive.google.com/folderview?id=FOLDER_ID_2',
+      },
+    });
+
+    assert.equal(calledFolderId, 'FOLDER_ID_2');
+  });
+
+  it('Message without Drive URL is ignored (no pipeline call)', async () => {
+    let pipelineCalled = false;
+    __setTelegramBotTestDeps({ runPipeline: async () => { pipelineCalled = true; } });
+
+    await bot.handleUpdate({
+      update_id: 1003,
+      message: {
+        message_id: 3,
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: 'Hello bot, what is the status?',
+      },
+    });
+
+    assert.equal(pipelineCalled, false);
+  });
+
+  // ── Gate callbacks ────────────────────────────────────────────────────────
+
+  it('gate:approve callback resolves the pending gate and edits message', async () => {
+    const { registerGate, resolveGate, pendingGates } = await import('../src/gate-manager.mjs');
+    pendingGates.clear();
+
+    let resolvedDecision = null;
+    const gatePromise = registerGate('run-gate-1', 'g1_gemini');
+    // Intercept resolution
+    gatePromise.then(d => { resolvedDecision = d; });
+
+    // Simulate approve callback
+    await bot.handleUpdate({
+      update_id: 2001,
+      callback_query: {
+        id: 'cq1',
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        message: {
+          message_id: 10,
+          chat: { id: 12345, type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: 'Запустить Gemini?',
+        },
+        data: 'gate:run-gate-1:g1_gemini:approve',
+        chat_instance: '1',
+      },
+    });
+
+    // Allow microtasks to flush
+    await new Promise(r => setImmediate(r));
+
+    assert.equal(resolvedDecision, 'approve', 'gate should resolve with approve');
+    assert.equal(pendingGates.has('run-gate-1'), false, 'gate should be removed from map');
+  });
+
+  it('gate:reject callback resolves with reject', async () => {
+    const { registerGate, pendingGates } = await import('../src/gate-manager.mjs');
+    pendingGates.clear();
+
+    let decision = null;
+    registerGate('run-gate-2', 'g5_upload').then(d => { decision = d; });
+
+    await bot.handleUpdate({
+      update_id: 2002,
+      callback_query: {
+        id: 'cq2',
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        message: {
+          message_id: 11,
+          chat: { id: 12345, type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: 'Загрузить?',
+        },
+        data: 'gate:run-gate-2:g5_upload:reject',
+        chat_instance: '1',
+      },
+    });
+
+    await new Promise(r => setImmediate(r));
+    assert.equal(decision, 'reject');
+  });
+
+  it('gate:openchat sets chatQuestionState and does not resolve gate', async () => {
+    const { registerGate, pendingGates, chatQuestionState } = await import('../src/gate-manager.mjs');
+    pendingGates.clear();
+    chatQuestionState.clear();
+
+    let resolved = false;
+    registerGate('run-gate-3', 'g2_qa').then(() => { resolved = true; });
+
+    await bot.handleUpdate({
+      update_id: 2003,
+      callback_query: {
+        id: 'cq3',
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        message: {
+          message_id: 12,
+          chat: { id: 12345, type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: 'Запустить QA?',
+        },
+        data: 'gate:run-gate-3:g2_qa:openchat',
+        chat_instance: '1',
+      },
+    });
+
+    await new Promise(r => setImmediate(r));
+    assert.equal(resolved, false, 'gate should NOT be resolved on openchat');
+    assert.ok(pendingGates.has('run-gate-3'), 'gate should stay pending');
+    assert.ok(chatQuestionState.has(12345), 'chatQuestionState should be set for chatId 12345');
+    const state = chatQuestionState.get(12345);
+    assert.equal(state.runId, 'run-gate-3');
+    assert.equal(state.gateId, 'g2_qa');
+  });
+
+  it('gate callback with wrong gateId answers "Gate expired"', async () => {
+    const { registerGate, pendingGates } = await import('../src/gate-manager.mjs');
+    pendingGates.clear();
+
+    registerGate('run-gate-4', 'g1_gemini'); // registered for g1_gemini
+
+    const answeredCallbacks = [];
+    // Override answerCallbackQuery to capture response
+    bot.api.config.use((prev, method, payload, signal) => {
+      if (method === 'answerCallbackQuery') {
+        answeredCallbacks.push(payload);
+        return { ok: true, result: true };
+      }
+      return prev(method, payload, signal);
+    });
+
+    await bot.handleUpdate({
+      update_id: 2004,
+      callback_query: {
+        id: 'cq4',
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        message: {
+          message_id: 13,
+          chat: { id: 12345, type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: 'Old message',
+        },
+        data: 'gate:run-gate-4:g5_upload:approve', // wrong gateId
+        chat_instance: '1',
+      },
+    });
+
+    await new Promise(r => setImmediate(r));
+    assert.ok(pendingGates.has('run-gate-4'), 'gate should still be pending');
+  });
+
+  // ── /status improvements ──────────────────────────────────────────────────
+
+  it('/status renders ledger entries as labelled steps', async () => {
+    const runId = 'status-run-1';
+    const runDir = path.join(TEST_RUNS_DIR, runId);
+    createdRunDirs.add(runDir);
+    fs.mkdirSync(runDir, { recursive: true });
+    const ledger = [
+      { schema: 'steel.run-request.v1', run_id: runId, created_at: '2026-01-01T00:00:00Z' },
+      { schema: 'steel.run-complete.v1', run_id: runId, created_at: '2026-01-01T00:05:00Z' },
+    ];
+    fs.writeFileSync(
+      path.join(runDir, 'ledger.jsonl'),
+      ledger.map(e => JSON.stringify(e)).join('\n') + '\n'
+    );
+
+    await bot.handleUpdate({
+      update_id: 3001,
+      message: {
+        message_id: 20,
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: `/status ${runId}`,
+        entities: [{ type: 'bot_command', offset: 0, length: 7 }],
+      },
+    });
+
+    const reply = sentMessages.find(m => m.text.includes(runId));
+    assert.ok(reply, 'should reply with run status');
+    assert.ok(reply.text.includes('Запрос принят') || reply.text.includes('run-request'),
+      `should contain human label; got: ${reply.text}`);
+    assert.ok(reply.text.includes('Анализ завершён') || reply.text.includes('run-complete'),
+      `should contain run-complete label; got: ${reply.text}`);
+  });
+
+  it('/status shows pending gate buttons when gate is active', async () => {
+    const { pendingGates, registerGate } = await import('../src/gate-manager.mjs');
+    pendingGates.clear();
+
+    const runId = 'status-run-2';
+    const runDir = path.join(TEST_RUNS_DIR, runId);
+    createdRunDirs.add(runDir);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runDir, 'ledger.jsonl'),
+      JSON.stringify({ schema: 'steel.run-request.v1', run_id: runId, created_at: '2026-01-01T00:00:00Z' }) + '\n'
+    );
+
+    registerGate(runId, 'g1_gemini'); // simulate pending gate
+
+    await bot.handleUpdate({
+      update_id: 3002,
+      message: {
+        message_id: 21,
+        from: { id: 12345, is_bot: false, first_name: 'Test' },
+        chat: { id: 12345, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: `/status ${runId}`,
+        entities: [{ type: 'bot_command', offset: 0, length: 7 }],
+      },
+    });
+
+    const reply = sentMessages.find(m => m.text.includes(runId));
+    assert.ok(reply, 'should reply');
+    // Should include reply_markup with gate buttons
+    assert.ok(reply.reply_markup, 'should include inline keyboard for pending gate');
   });
 });

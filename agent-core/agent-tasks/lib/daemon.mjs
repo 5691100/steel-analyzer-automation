@@ -78,12 +78,14 @@ export async function poll() {
 
     if ((task.attempts || 0) >= 3) {
       task.state = 'dead_letter';
+      { const tmpDL = queuePath + '.tmp'; fs.writeFileSync(tmpDL, JSON.stringify(task, null, 2)); fs.renameSync(tmpDL, queuePath); }
       fs.renameSync(queuePath, path.join(DEAD, file));
       continue;
     }
 
     if (task.deadline_at && Date.parse(task.deadline_at) < Date.now()) {
       task.state = 'dead_letter';
+      { const tmpDL = queuePath + '.tmp'; fs.writeFileSync(tmpDL, JSON.stringify(task, null, 2)); fs.renameSync(tmpDL, queuePath); }
       fs.renameSync(queuePath, path.join(DEAD, file));
       continue;
     }
@@ -106,12 +108,21 @@ export async function poll() {
       continue;
     }
 
+    // Атомарно захватываем через rename queue -> claiming
+    const claimingPath = queuePath + '.claiming';
+    try {
+      fs.renameSync(queuePath, claimingPath);
+    } catch (e) {
+      if (e.code === 'ENOENT') continue; // другой экземпляр уже захватил
+      throw e;
+    }
+
     task.state = 'claimed';
     task.claimed_at = now;
     const tmpRunningPath = runningPath + '.tmp';
     fs.writeFileSync(tmpRunningPath, JSON.stringify(task, null, 2));
     fs.renameSync(tmpRunningPath, runningPath);
-    fs.unlinkSync(queuePath);
+    fs.unlinkSync(claimingPath); // убираем claiming файл
 
     const adapter = ADAPTER_MAP[task.to];
     const cli = task.to;
@@ -158,6 +169,7 @@ export async function poll() {
         task.attempts = (task.attempts || 0) + 1;
         if (task.attempts >= 3) {
           task.state = 'dead_letter';
+          { const tmpDL = runningPath + '.tmp'; fs.writeFileSync(tmpDL, JSON.stringify(task, null, 2)); fs.renameSync(tmpDL, runningPath); }
           fs.renameSync(runningPath, path.join(DEAD, file));
         } else {
           task.state = 'queued';
@@ -169,7 +181,8 @@ export async function poll() {
       task.attempts = (task.attempts || 0) + 1;
       if (task.attempts >= 3) {
         task.state = 'dead_letter';
-        fs.renameSync(runningPath, path.join(DEAD, file));
+          { const tmpDL = runningPath + '.tmp'; fs.writeFileSync(tmpDL, JSON.stringify(task, null, 2)); fs.renameSync(tmpDL, runningPath); }
+          fs.renameSync(runningPath, path.join(DEAD, file));
       } else {
         task.state = 'queued';
         fs.writeFileSync(queuePath, JSON.stringify(task, null, 2));

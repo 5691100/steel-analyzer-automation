@@ -205,10 +205,10 @@ describe('agent-tasks-daemon', () => {
     fs.writeFileSync(path.join(queueDir, 'task-8-p1.json'), JSON.stringify(task2));
 
     let order = [];
-    mock.method(child_process, 'spawnSync', (cmd, args) => {
+    mock.method(child_process, 'spawnSync', (cmd, args, options) => {
       if (cmd === 'which') return { status: 0 };
       if (cmd === 'codex' || cmd === 'gemini' || cmd === 'claude') {
-        const promptContent = args[args.length - 1];
+        const promptContent = options && options.input ? options.input : args[args.length - 1];
         if (promptContent.includes('p5')) order.push('p5');
         if (promptContent.includes('p1')) order.push('p1');
         return { status: 0, stdout: '<<<POS_RESULT>>>\n{"verdict":"APPROVE","findings":[]}\n<<<END>>>' };

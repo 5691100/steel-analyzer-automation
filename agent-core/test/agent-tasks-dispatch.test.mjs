@@ -55,10 +55,10 @@ describe('agent-tasks-dispatch', () => {
     assert.equal(parsed, null);
   });
 
-  test('12. verdict parsing multiple sentinels — first match used', () => {
+  test('12. verdict parsing multiple sentinels — last match used', () => {
     const stdout = '<<<POS_RESULT>>>{"verdict":"FIRST"}<<<END>>>\n<<<POS_RESULT>>>{"verdict":"SECOND"}<<<END>>>';
     const parsed = adapters.parseVerdict(stdout);
-    assert.equal(parsed.verdict, 'FIRST');
+    assert.equal(parsed.verdict, 'SECOND');
   });
 
   test('13. stdout >10MB — truncated, parse still finds sentinel near start', () => {
@@ -110,4 +110,31 @@ describe('agent-tasks-dispatch', () => {
     const savedTask = JSON.parse(fs.readFileSync(path.join(resultsDir, taskId, 'task.json'), 'utf8'));
     assert.equal(savedTask.attempts, 0);
   });
+
+  test('16. dry_run in pos-dispatch — task marked DRY_RUN, no CLI invoked', async () => {
+    const taskId = 'dryrun-1';
+    const task = {
+      schema: 'pos.task.v1', id: taskId, from: 'claude', to: 'codex', type: 'code-review',
+      priority: 5, created_at: new Date().toISOString(), state: 'queued',
+      dry_run: true,
+      prompt_path: path.join(tmpDir, 'prompt.md'), cwd: tmpDir,
+      result_path: 'results/' + taskId + '/result.json'
+    };
+    fs.writeFileSync(path.join(tmpDir, 'prompt.md'), 'test dry');
+    fs.writeFileSync(path.join(queueDir, taskId + '.json'), JSON.stringify(task));
+
+    let cliInvoked = false;
+    mock.method(cp, 'spawnSync', (cmd) => {
+      if (cmd === 'which') return { status: 0 };
+      cliInvoked = true;
+      return { status: 0, stdout: '' };
+    });
+
+    await dispatchLib.dispatch(taskId);
+
+    assert.ok(!cliInvoked, 'CLI should not be invoked for dry_run task');
+    const result = JSON.parse(fs.readFileSync(path.join(resultsDir, taskId, 'result.json'), 'utf8'));
+    assert.equal(result.verdict, 'DRY_RUN');
+  });
+
 });

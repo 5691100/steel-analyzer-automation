@@ -46,6 +46,25 @@ export function startupSweep() {
       console.error(`Failed to process orphan task ${file}: ${e.message}`);
     }
   }
+
+  // Recover stale .claiming files (crashed mid-claim before running/ was written)
+  if (fs.existsSync(QUEUE)) {
+    const claimingFiles = fs.readdirSync(QUEUE).filter(f => f.endsWith('.json.claiming'));
+    let recovered = 0;
+    for (const file of claimingFiles) {
+      const claimingPath = path.join(QUEUE, file);
+      const queuePath = path.join(QUEUE, file.slice(0, -'.claiming'.length));
+      try {
+        fs.renameSync(claimingPath, queuePath);
+        recovered++;
+      } catch (e) {
+        console.error(`[STARTUP] Failed to recover claiming file ${file}: ${e.message}`);
+      }
+    }
+    if (recovered > 0) {
+      console.log(`[STARTUP] Recovered ${recovered} stale .claiming file(s) back to queue`);
+    }
+  }
 }
 
 export async function poll() {

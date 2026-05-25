@@ -64,7 +64,31 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 - Dependencies: `exceljs ^4.4.0`, `googleapis ^171.4.0`, `grammy` (Telegram bot)
 - Required env vars for bot startup: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (numeric; bot exits if either missing)
 - Dashboard auto-publish uses git commands from `publishRun()`; provide GitHub push credentials to the PM2 `steel-bot` environment via `GITHUB_TOKEN`. The helper reports publish failures instead of blocking a successful Drive upload.
-- PM2 launch: `pm2 start ecosystem.config.cjs` starts both `steel-orchestrator` and `steel-bot`
+- PM2 launch: `pm2 start ecosystem.config.cjs` starts `steel-orchestrator`, `steel-bot`, and `agent-tasks-daemon`
+
+## Agent Tasks
+
+File-based multi-runtime task dispatch. PM2 daemon polls `agent-core/agent-tasks/queue/`,
+dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `results/<id>/`.
+
+- **Daemon**: `pm2 start ecosystem.config.cjs` includes `agent-tasks-daemon`
+- **Manual dispatch**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs <task-id>`
+- **Replay dead-letter**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs --replay <task-id>`
+- **dry_run**: set `dry_run: true` in task JSON — daemon/dispatch skips CLI, writes `verdict:"DRY_RUN"`
+- **Schemas**: `agent-core/agent-tasks/schemas/pos.task.v1.json` + `pos.result.v1.json`
+- **Queue dirs**: `queue/` → `running/` → `results/<id>/` | `dead-letter/` 
+
+## Agent Tasks
+
+File-based multi-runtime task dispatch. PM2 daemon polls `agent-core/agent-tasks/queue/`,
+dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `results/<id>/`.
+
+- **Daemon**: `pm2 start ecosystem.config.cjs` includes `agent-tasks-daemon`
+- **Manual dispatch**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs <task-id>`
+- **Replay dead-letter**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs --replay <task-id>`
+- **dry_run**: set `dry_run: true` in task JSON — daemon/dispatch skips CLI, writes `verdict:"DRY_RUN"`
+- **Schemas**: `agent-core/agent-tasks/schemas/pos.task.v1.json` + `pos.result.v1.json`
+- **Queue dirs**: `queue/` → `running/` → `results/<id>/` | `dead-letter/`
 
 ## Documentation
 
@@ -74,5 +98,5 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 - Operations: `docs/operations/`
 
 <!-- superflow:onboarded -->
-<!-- sprint:11 -->
-<!-- updated-by-superflow:2026-05-24 -->
+<!-- sprint:12 -->
+<!-- updated-by-superflow:2026-05-25 -->

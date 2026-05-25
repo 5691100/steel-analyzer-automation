@@ -71,6 +71,13 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   }
 
   const outputDir = path.join(runDir, 'output');
+  if (fs.existsSync(outputDir)) {
+    for (const file of fs.readdirSync(outputDir)) {
+      if (file.endsWith('.xlsx')) {
+        fs.rmSync(path.join(outputDir, file), { force: true });
+      }
+    }
+  }
   const existingFiles = fs.existsSync(outputDir) ? fs.readdirSync(outputDir) : [];
   await generate(analysis, outputDir, { existingFiles });
 

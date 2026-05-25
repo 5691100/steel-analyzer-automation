@@ -18,7 +18,7 @@
     "outputs",
     "created_at"
   ],
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "schema": {
       "type": "string",
@@ -35,6 +35,9 @@
     "project_name": {
       "type": "string",
       "minLength": 1
+    },
+    "project_no": {
+      "type": "string"
     },
     "project": {
       "type": "string",
@@ -71,6 +74,14 @@
         "properties": {
           "name": { "type": "string" },
           "coating": { "type": "string" },
+          "coating_summary": { "type": "string" },
+          "fire_summary": { "type": "string" },
+          "transport_summary": { "type": "string" },
+          "exec_class": { "type": "string" },
+          "fire_protection": { "type": "string" },
+          "welding": { "type": "string" },
+          "gratings_steps": { "type": "string" },
+          "notes": { "type": "string" },
           "source_total_kg": { "type": "number" },
           "categories": {
             "type": "array",
@@ -79,6 +90,11 @@
               "required": ["name", "weight_kg", "paint_m2", "qty"],
               "properties": {
                 "name": { "type": "string" },
+                "coating": { "type": "string" },
+                "coating_class": { "type": "string" },
+                "fire_class": { "type": "string" },
+                "exec_class": { "type": "string" },
+                "notes": { "type": "string" },
                 "weight_kg": { "type": "number" },
                 "paint_m2": { "type": "number" },
                 "qty": { "type": "number" },
@@ -93,6 +109,12 @@
               "required": ["profile", "steel_grade", "qty", "length_m", "weight_kg", "paint_m2"],
               "properties": {
                 "profile": { "type": "string" },
+                "category": { "type": "string" },
+                "fire_class": { "type": "string" },
+                "critical_temp_c": { "type": ["number", "null"] },
+                "am_v": { "type": ["number", "null"] },
+                "coating": { "type": "string" },
+                "source": { "type": "string" },
                 "steel_grade": { "type": "string" },
                 "standard": { "type": ["string", "null"] },
                 "qty": { "type": "number" },
@@ -109,6 +131,8 @@
               "required": ["part", "profile", "steel_grade", "qty", "length_mm", "weight_kg", "paint_m2"],
               "properties": {
                 "part": { "type": "string" },
+                "part_no": { "type": "string" },
+                "assembly_no": { "type": "string" },
                 "profile": { "type": "string" },
                 "steel_grade": { "type": "string" },
                 "standard": { "type": ["string", "null"] },
@@ -118,6 +142,11 @@
                 "paint_m2": { "type": "number" },
                 "source_line": { "type": "string" },
                 "category": { "type": "string" },
+                "am": { "type": "number" },
+                "coating": { "type": "string" },
+                "fire_class": { "type": "string" },
+                "critical_temp_c": { "type": ["number", "null"] },
+                "oversize": { "type": "string" },
                 "area_weight_source": { "type": "string" },
                 "source": { "type": "string" }
               }
@@ -164,6 +193,32 @@
               }
             }
           },
+          "excluded_rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "subproject": { "type": "string" },
+                "category": { "type": "string" },
+                "assembly_no": { "type": "string" },
+                "part": { "type": "string" },
+                "part_no": { "type": "string" },
+                "profile": { "type": "string" },
+                "steel_grade": { "type": "string" },
+                "qty": { "type": "number" },
+                "length_mm": { "type": "number" },
+                "weight_kg": { "type": "number" },
+                "paint_m2": { "type": "number" },
+                "am": { "type": "number" },
+                "coating": { "type": "string" },
+                "fire_class": { "type": "string" },
+                "critical_temp_c": { "type": ["number", "null"] },
+                "oversize": { "type": "string" },
+                "exclusion_reason": { "type": "string" },
+                "source": { "type": "string" }
+              }
+            }
+          },
           "totals": {
             "type": "object",
             "required": ["weight_kg", "paint_m2"],
@@ -192,6 +247,54 @@
       }
     },
     "sources": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "properties": {
+              "subproject": { "type": "string" },
+              "source_type": { "type": "string" },
+              "type": { "type": "string" },
+              "file_name": { "type": "string" },
+              "name": { "type": "string" },
+              "used_for": { "type": "string" },
+              "priority": { "type": "string" },
+              "notes": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
+    "sources_detail": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subproject": { "type": "string" },
+          "source_type": { "type": "string" },
+          "type": { "type": "string" },
+          "file_name": { "type": "string" },
+          "name": { "type": "string" },
+          "used_for": { "type": "string" },
+          "priority": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "transport_detail": {
+      "type": "object",
+      "properties": {
+        "t1": { "type": "array", "items": { "type": "object" } },
+        "t2": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "analysis_warnings": {
       "type": "array",
       "items": { "type": "string" }
     },

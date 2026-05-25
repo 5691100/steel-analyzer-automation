@@ -41,8 +41,28 @@ export async function dispatch(id, fromDead = false) {
 
   task.state = 'claimed';
   task.claimed_at = now;
-  fs.writeFileSync(runningPath, JSON.stringify(task, null, 2));
+  const tmpRunningPath = runningPath + '.tmp';
+  fs.writeFileSync(tmpRunningPath, JSON.stringify(task, null, 2));
+  fs.renameSync(tmpRunningPath, runningPath);
   fs.unlinkSync(sourcePath);
+
+  if (task.dry_run) {
+    fs.mkdirSync(path.join(RESULTS, id), { recursive: true });
+    fs.writeFileSync(path.join(RESULTS, id, 'result.json'), JSON.stringify({
+      schema: 'pos.result.v1',
+      task_id: id,
+      from: task.to,
+      verdict: 'DRY_RUN',
+      findings: [],
+      exit_code: 0,
+      completed_at: new Date().toISOString(),
+      error: null,
+      gepa_proposal: null
+    }, null, 2));
+    fs.renameSync(runningPath, path.join(RESULTS, id, 'task.json'));
+    console.log('[DRY_RUN] task ' + id + ' processed without CLI invocation');
+    return;
+  }
 
   const adapter = ADAPTER_MAP[task.to];
   let tempPrompt;

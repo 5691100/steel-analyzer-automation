@@ -41,12 +41,16 @@ function defaultMakeGateKb(runId, gateId) {
 async function askGate(runId, gateId, prompt, notifyFn, makeGateKb, waitForGate, gateTimeoutMs) {
   const keyboard = makeGateKb(runId, gateId);
   await notifyFn(prompt, keyboard);
-  return Promise.race([
-    waitForGate(runId, gateId),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Gate ${gateId} timed out after ${gateTimeoutMs / 60000} min`)), gateTimeoutMs)
-    ),
-  ]);
+  let handle;
+  const timeoutP = new Promise((_, reject) => {
+    handle = setTimeout(() => reject(new Error(`Gate ${gateId} timed out after ${gateTimeoutMs / 60000} min`)), gateTimeoutMs);
+    handle.unref();
+  });
+  try {
+    return await Promise.race([waitForGate(runId, gateId), timeoutP]);
+  } finally {
+    clearTimeout(handle);
+  }
 }
 
 export async function runPipeline(runId, folderId, notifyFn, {

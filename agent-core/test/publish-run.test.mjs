@@ -173,6 +173,8 @@ describe('publishRun', () => {
   });
 
   it('returns ok false when git push fails', async () => {
+    const oldToken = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
     writeAnalysis({
       run_id: 'push-fails',
       project_name: 'Push Project',
@@ -193,6 +195,7 @@ describe('publishRun', () => {
     const result = await publishRun('push-fails', runDir, repoRoot, { spawnSyncFn });
 
     assert.deepEqual(result, { ok: false, error: 'auth failed' });
+    process.env.GITHUB_TOKEN = oldToken;
     assert.deepEqual(calls.map((args) => args.slice(2).join(' ')), [
       'pull --rebase',
       'add dashboard/runs/',
@@ -205,6 +208,8 @@ describe('publishRun', () => {
   });
 
   it('returns exact rebase failure error and skips commit and push', async () => {
+    const oldToken = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
     writeAnalysis({
       run_id: 'rebase-fails',
       project_name: 'Rebase Project',
@@ -222,6 +227,8 @@ describe('publishRun', () => {
     const result = await publishRun('rebase-fails', runDir, repoRoot, { spawnSyncFn });
 
     assert.deepEqual(result, { ok: false, error: 'rebase failed' });
+    process.env.GITHUB_TOKEN = oldToken;
+    process.env.GITHUB_TOKEN = oldToken;
     assert.deepEqual(calls.map((args) => args.slice(2).join(' ')), ['pull --rebase']);
     assert.equal(fs.existsSync(path.join(repoRoot, 'dashboard/runs/index.json')), false);
   });

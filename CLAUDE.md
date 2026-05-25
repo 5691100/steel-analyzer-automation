@@ -76,18 +76,6 @@ dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `resu
 - **Replay dead-letter**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs --replay <task-id>`
 - **dry_run**: set `dry_run: true` in task JSON — daemon/dispatch skips CLI, writes `verdict:"DRY_RUN"`
 - **Schemas**: `agent-core/agent-tasks/schemas/pos.task.v1.json` + `pos.result.v1.json`
-- **Queue dirs**: `queue/` → `running/` → `results/<id>/` | `dead-letter/` 
-
-## Agent Tasks
-
-File-based multi-runtime task dispatch. PM2 daemon polls `agent-core/agent-tasks/queue/`,
-dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `results/<id>/`.
-
-- **Daemon**: `pm2 start ecosystem.config.cjs` includes `agent-tasks-daemon`
-- **Manual dispatch**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs <task-id>`
-- **Replay dead-letter**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs --replay <task-id>`
-- **dry_run**: set `dry_run: true` in task JSON — daemon/dispatch skips CLI, writes `verdict:"DRY_RUN"`
-- **Schemas**: `agent-core/agent-tasks/schemas/pos.task.v1.json` + `pos.result.v1.json`
 - **Queue dirs**: `queue/` → `running/` → `results/<id>/` | `dead-letter/`
 
 ## Documentation

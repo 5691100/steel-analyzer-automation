@@ -200,7 +200,7 @@ describe('publishRun', () => {
       'push',
       'reset HEAD~1',
       'checkout -- dashboard/runs/',
-      'clean -fd -- dashboard/runs/push-fails.json',
+      'clean -fd -- dashboard/runs/push-fails.json dashboard/runs/index.json',
     ]);
   });
 
@@ -271,7 +271,7 @@ describe('publishRun', () => {
 
     assert.equal(result.ok, false);
     const lastCall = calls[calls.length - 1];
-    assert.deepEqual(lastCall.slice(2), ['clean', '-fd', '--', 'dashboard/runs/cleanup-test.json']);
+    assert.deepEqual(lastCall.slice(2), ['clean', '-fd', '--', 'dashboard/runs/cleanup-test.json', 'dashboard/runs/index.json']);
   });
 
   function writeAnalysis(payload) {

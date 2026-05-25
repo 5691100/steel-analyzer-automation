@@ -1,4 +1,8 @@
 import { Bot, InlineKeyboard } from 'grammy';
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

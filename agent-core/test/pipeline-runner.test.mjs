@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function setupRun(tempDir, runId, itemCount = 3) {
+function setupRun(tempDir, runId, itemCount = 3, withOutput = false) {
   const runsDir = path.join(tempDir, 'steel-bus/runs');
   const runDir = path.join(runsDir, runId);
   fs.mkdirSync(runDir, { recursive: true });
@@ -17,6 +17,11 @@ function setupRun(tempDir, runId, itemCount = 3) {
     path.join(runDir, 'manifest-drive-download.json'),
     JSON.stringify({ items: Array(itemCount).fill({}) })
   );
+  if (withOutput) {
+    const outputDir = path.join(runDir, 'output');
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'workbook.xlsx'), 'mock');
+  }
   return { runsDir, runDir };
 }
 
@@ -39,17 +44,17 @@ describe('Pipeline Runner', () => {
     const runId = 'test-pipeline-run';
     const folderId = 'test-folder';
     const getDrive = async () => ({});
-    const doDownload = async () => {
-      const { runDir } = setupRun(tempDir, runId);
-    };
+    const doDownload = async () => { setupRun(tempDir, runId, 3, true); };
     const doAnalysis = async () => ({ ok: true });
     const doQA = async () => ({ verdict: 'ACCEPTED' });
+    const doUpload = async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' });
+    const doPublish = async () => ({ ok: true });
     const waitForGate = async () => 'approve';
     const makeGateKb = () => ({ inline_keyboard: [] });
-    const { runsDir } = setupRun(tempDir, runId);
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
 
     await runPipeline(runId, folderId, notifyFn, {
-      getDrive, doDownload, doAnalysis, doQA, waitForGate, makeGateKb, runsDir,
+      getDrive, doDownload, doAnalysis, doQA, doUpload, doPublish, waitForGate, makeGateKb, runsDir,
     });
 
     assert.ok(notifications.length >= 4, `Expected ≥4 notifications, got ${notifications.length}`);
@@ -102,11 +107,11 @@ describe('Pipeline Runner', () => {
     const notifications = [];
     const notifyFn = async (text, kb) => notifications.push({ text, kb });
     const runId = 'gate-order-run';
-    const { runsDir } = setupRun(tempDir, runId);
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
 
     await runPipeline(runId, 'folder', notifyFn, {
       getDrive: async () => ({}),
-      doDownload: async () => { setupRun(tempDir, runId); },
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
       doAnalysis: async () => ({ ok: true }),
       doQA: async () => ({ verdict: 'ACCEPTED' }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),

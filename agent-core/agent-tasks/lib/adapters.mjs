@@ -13,7 +13,7 @@ export function codexAdapter(task, promptPath) {
     cwd: task.cwd,
     timeout: (task.timeout_sec || 600) * 1000,
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 50 * 1024 * 1024
   });
   return { stdout: result.stdout || '', exitCode: result.status };
 }
@@ -25,7 +25,7 @@ export function geminiAdapter(task, promptPath) {
     cwd: task.cwd,
     timeout: (task.timeout_sec || 600) * 1000,
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 50 * 1024 * 1024
   });
   return { stdout: result.stdout || '', exitCode: result.status };
 }
@@ -37,7 +37,7 @@ export function claudeAdapter(task, promptPath) {
     cwd: task.cwd,
     timeout: (task.timeout_sec || 600) * 1000,
     encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 50 * 1024 * 1024
   });
   return { stdout: result.stdout || '', exitCode: result.status };
 }

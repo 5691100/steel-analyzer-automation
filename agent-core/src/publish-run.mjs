@@ -148,7 +148,10 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
           runGit(spawnSyncFn, repoRoot, ['reset', 'HEAD', '--', 'dashboard/runs/']);
         }
         runGit(spawnSyncFn, repoRoot, ['checkout', '--', 'dashboard/runs/']);
-        runGit(spawnSyncFn, repoRoot, ['clean', '-fd', '--', path.relative(repoRoot, publishedPath)]);
+        runGit(spawnSyncFn, repoRoot, ['clean', '-fd', '--',
+          path.relative(repoRoot, publishedPath),
+          path.relative(repoRoot, indexPath),
+        ]);
         return { ok: false, error: gitFailure(result, `git ${args[args.length - 1]} failed`) };
       }
     }

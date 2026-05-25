@@ -16,6 +16,15 @@ module.exports = {
         TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID ?? '',
         GITHUB_TOKEN: process.env.GITHUB_TOKEN || ''
       }
+    },
+    {
+      name: 'agent-tasks-daemon',
+      script: 'agent-core/agent-tasks/bin/pos-daemon.mjs',
+      watch: false,
+      restart_delay: 5000,
+      max_restarts: 10,
+      min_uptime: 10000,
+      kill_timeout: 5000
     }
   ]
 };

@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "pos.result.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "task_id",
+    "from",
+    "verdict",
+    "completed_at"
+  ],
+  "properties": {
+    "schema": { "const": "pos.result.v1" },
+    "task_id": { "type": "string" },
+    "from": { "type": "string" },
+    "verdict": { "enum": ["APPROVE", "REQUEST_CHANGES", "ACCEPTED", "FAIL", "ERROR", "DRY_RUN"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "exit_code": { "type": "integer" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "error": { "type": ["string", "null"] },
+    "gepa_proposal": { "type": ["object", "null"] }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "pos.task.v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "from",
+    "to",
+    "type",
+    "created_at",
+    "state",
+    "prompt_path",
+    "cwd",
+    "result_path"
+  ],
+  "properties": {
+    "schema": { "const": "pos.task.v1" },
+    "id": { "type": "string" },
+    "from": { "type": "string" },
+    "to": { "enum": ["codex", "gemini", "claude"] },
+    "type": { "enum": ["code-review", "code-fix", "analysis", "implementation"] },
+    "priority": { "type": "integer", "minimum": 1, "maximum": 10, "default": 5 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "deadline_at": { "type": ["string", "null"], "format": "date-time" },
+    "claimed_at": { "type": ["string", "null"], "format": "date-time" },
+    "state": { "enum": ["queued", "claimed", "running", "done", "failed", "dead_letter"] },
+    "prompt_path": { "type": "string" },
+    "context_paths": { "type": "array", "items": { "type": "string" } },
+    "cwd": { "type": "string" },
+    "timeout_sec": { "type": "integer", "default": 600 },
+    "result_path": { "type": "string" },
+    "attempts": { "type": "integer", "default": 0 },
+    "correlation_id": { "type": ["string", "null"] },
+    "dry_run": { "type": "boolean", "default": false }
+  }
+}

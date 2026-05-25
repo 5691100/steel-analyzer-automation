@@ -1,5 +1,7 @@
 import fs from 'fs';
 import path from 'path';
+
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
@@ -123,7 +125,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
         if (iteration >= maxCorrections) break;
 
         iteration++;
-        await notifyFn(`❌ QA: дефекты найдены\n${qaResult.notes}`);
+        await notifyFn(`❌ QA: дефекты найдены\n${esc(qaResult.notes)}`);
 
         // G3 — correction loop approval
         const g3 = await askGate(
@@ -144,7 +146,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
     } while (qaResult.verdict !== 'ACCEPTED' && iteration < maxCorrections);
 
     if (qaResult.verdict !== 'ACCEPTED') {
-      const msg = `❌ QA: BLOCKED после ${maxCorrections} коррекций\n${qaResult.notes}`;
+      const msg = `❌ QA: BLOCKED после ${maxCorrections} коррекций\n${esc(qaResult.notes)}`;
       await notifyFn(msg);
       throw new Error(`QA blocked after ${maxCorrections} corrections: ${qaResult.notes}`);
     }
@@ -190,6 +192,10 @@ export async function runPipeline(runId, folderId, notifyFn, {
       ? fs.readdirSync(outputDir).filter(f => f.endsWith('.xlsx'))
       : [];
 
+    if (xlsxFiles.length === 0) {
+      throw new Error('No .xlsx files found in output directory — nothing to upload');
+    }
+
     const uploadResults = [];
     for (const file of xlsxFiles) {
       const res = await doUpload(runId, folderId, path.join(outputDir, file), approvalToken);
@@ -198,7 +204,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
 
     const pubResult = await doPublish(runId, runDir).catch(err => ({ ok: false, error: err.message }));
     if (!pubResult.ok) {
-      await notifyFn(`⚠️ Загружено, но dashboard publish не удался: ${pubResult.error}`);
+      await notifyFn(`⚠️ Загружено, но dashboard publish не удался: ${esc(pubResult.error)}`);
     }
 
     const fileList = uploadResults.map(r => `• ${path.basename(r.manifestPath ?? '')} → MD5 ${r.md5Status}`).join('\n');
@@ -208,7 +214,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
 
   } catch (err) {
     console.error(`Pipeline failed for ${runId}:`, err);
-    await notifyFn(`❌ Pipeline failed: ${err.message}`);
+    await notifyFn(`❌ Pipeline failed: ${esc(err.message)}`);
     throw err;
   }
 }

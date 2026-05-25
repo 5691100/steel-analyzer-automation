@@ -142,13 +142,14 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
       const result = runGit(spawnSyncFn, repoRoot, args);
       if (result.status !== 0) {
         // Fix 4b: Clean up written files on failure so next attempt isn't dirty
-        if (args[0] === 'push') {
+        if (args.includes('push')) {
           runGit(spawnSyncFn, repoRoot, ['reset', 'HEAD~1']);
-        } else if (args[0] === 'commit') {
+        } else if (args.includes('commit')) {
           runGit(spawnSyncFn, repoRoot, ['reset', 'HEAD', '--', 'dashboard/runs/']);
         }
         runGit(spawnSyncFn, repoRoot, ['checkout', '--', 'dashboard/runs/']);
-        return { ok: false, error: gitFailure(result, `git ${args[0]} failed`) };
+        runGit(spawnSyncFn, repoRoot, ['clean', '-fd', 'dashboard/runs/']);
+        return { ok: false, error: gitFailure(result, `git ${args[args.length - 1]} failed`) };
       }
     }
   }

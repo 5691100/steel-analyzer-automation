@@ -200,6 +200,7 @@ describe('publishRun', () => {
       'push',
       'reset HEAD~1',
       'checkout -- dashboard/runs/',
+      'clean -fd dashboard/runs/',
     ]);
   });
 
@@ -270,7 +271,7 @@ describe('publishRun', () => {
 
     assert.equal(result.ok, false);
     const lastCall = calls[calls.length - 1];
-    assert.deepEqual(lastCall.slice(2), ['checkout', '--', 'dashboard/runs/']);
+    assert.deepEqual(lastCall.slice(2), ['clean', '-fd', 'dashboard/runs/']);
   });
 
   function writeAnalysis(payload) {

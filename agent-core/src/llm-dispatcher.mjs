@@ -79,7 +79,25 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
     const jsonStr = jsonMatch ? jsonMatch[0] : stdout;
     analysis = JSON.parse(jsonStr);
   } catch (err) {
-    throw new Error(`Failed to parse Gemini JSON output. Raw output saved to ${agyLogPath}. Error: ${err.message}`);
+    // stdout truncated by --print-timeout: agy writes full output to /tmp/final_steel_output.json
+    const fallbackPath = '/tmp/final_steel_output.json';
+    let usedFallback = false;
+    if (fs.existsSync(fallbackPath)) {
+      const mtime = fs.statSync(fallbackPath).mtimeMs;
+      if (mtime > dispatchStart) {
+        try {
+          const fallback = JSON.parse(fs.readFileSync(fallbackPath, 'utf8'));
+          if (fallback && typeof fallback === 'object' && fallback.subprojects) {
+            analysis = fallback;
+            usedFallback = true;
+            console.log(`stdout truncated — used fallback ${fallbackPath} (${fs.statSync(fallbackPath).size}B)`);
+          }
+        } catch (_) { /* fallback unreadable, fall through */ }
+      }
+    }
+    if (!usedFallback) {
+      throw new Error(`Failed to parse Gemini JSON output. Raw output saved to ${agyLogPath}. Error: ${err.message}`);
+    }
   }
 
   let folderName = 'Unknown';

@@ -119,5 +119,5 @@ docs/
 
 `requested` -> `sources_manifested` -> `sources_downloaded` -> `extraction_done` -> `workbooks_generated` -> `workbooks_validated` -> `producer_handoff_done` -> `claude_review_requested` -> `claude_review_passed` | `claude_review_blocked` -> `codex_integration_requested` -> `codex_integration_done` -> `gepa_proposed` -> `gepa_reviewed` -> `upload_ready` -> `uploaded_verified` -> `closed` | `dead_letter`
 
-<!-- sprint:14 -->
+<!-- sprint:15 -->
 <!-- updated-by-superflow:2026-05-26 -->

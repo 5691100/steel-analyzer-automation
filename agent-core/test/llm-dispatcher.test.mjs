@@ -63,6 +63,61 @@ describe('dispatchOpenChatQuestion', () => {
 });
 
 describe('dispatchGeminiAnalysis', () => {
+  it('uses /tmp/final_steel_output.json fallback when stdout is truncated', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-disp-fallback-'));
+    const runDir = path.join(tempDir, 'run');
+    const sourcesDir = path.join(runDir, 'sources');
+    fs.mkdirSync(sourcesDir, { recursive: true });
+    fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
+
+    const fallbackData = {
+      project_name: 'FallbackProject',
+      subprojects: [{ name: 'Halli', totals: { weight_kg: 5000, paint_m2: 100 }, profiles: [] }]
+    };
+    const fallbackPath = '/tmp/final_steel_output.json';
+
+    let capturedAnalysis;
+    await dispatchGeminiAnalysis('run-fallback', runDir, sourcesDir, {
+      // Write fallback inside spawn so its mtime is after dispatchStart
+      spawn: () => {
+        fs.writeFileSync(fallbackPath, JSON.stringify(fallbackData), 'utf8');
+        // Guarantee mtime is in the future relative to dispatchStart
+        const future = new Date(Date.now() + 5000);
+        fs.utimesSync(fallbackPath, future, future);
+        return { stdout: 'not valid json {{{', status: 0, error: null };
+      },
+      generate: async (analysis) => { capturedAnalysis = analysis; },
+      generateDash: () => {},
+      verify: () => ({ ok: true, errors: [], files: [] })
+    });
+
+    assert.equal(capturedAnalysis.project_name, 'FallbackProject');
+    assert.equal(capturedAnalysis.subprojects[0].name, 'Halli');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('throws when stdout is truncated and fallback file is absent', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-disp-nofallback-'));
+    const runDir = path.join(tempDir, 'run');
+    const sourcesDir = path.join(runDir, 'sources');
+    fs.mkdirSync(sourcesDir, { recursive: true });
+    fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
+
+    // Remove fallback if it exists from previous test, or ensure it's stale
+    try { fs.unlinkSync('/tmp/final_steel_output.json'); } catch (_) {}
+
+    await assert.rejects(
+      dispatchGeminiAnalysis('run-nofallback', runDir, sourcesDir, {
+        spawn: () => ({ stdout: 'not valid json', status: 0, error: null }),
+        generate: async () => {},
+        generateDash: () => {},
+        verify: () => ({ ok: true, errors: [], files: [] })
+      }),
+      /Failed to parse Gemini JSON output/
+    );
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it('calls agy binary with --dangerously-skip-permissions, -p, and - with prompt in stdin', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-disp-test-'));
     const runDir = path.join(tempDir, 'run');

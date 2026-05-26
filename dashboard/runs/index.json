@@ -1,5 +1,14 @@
 [
   {
+    "run_id": "steel-20260526-XYWH0",
+    "project_name": "unknown",
+    "status": "failed",
+    "created_at": "2026-05-26T17:48:58.707Z",
+    "totals": null,
+    "subproject_count": 0,
+    "error": "Network request for 'sendMessage' failed!"
+  },
+  {
     "run_id": "steel-20260526-MXEGK",
     "project_name": "unknown",
     "status": "failed",

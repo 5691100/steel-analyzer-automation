@@ -90,7 +90,7 @@ describe('dispatchGeminiAnalysis', () => {
     });
 
     assert.equal(calledCmd, 'agy');
-    assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '--print-timeout', '15m', '-p', '-']);
+    assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '--print-timeout', '35m', '-p', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('run-123'));
     assert.equal(calledOpts.cwd, '/tmp');
     fs.rmSync(tempDir, { recursive: true, force: true });

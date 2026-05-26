@@ -50,9 +50,9 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   const promptChars = prompt.length;
   console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars)...`);
   const dispatchStart = Date.now();
-  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '15m', '-p', '-'], {
+  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '35m', '-p', '-'], {
     input: prompt,
-    timeout: 1_200_000,
+    timeout: 2_400_000,
     encoding: 'utf8',
     cwd: '/tmp'
   });

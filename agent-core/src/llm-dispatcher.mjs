@@ -30,7 +30,8 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   const prompt = buildAnalysisPrompt(runId, sourceTexts);
 
   console.log(`Dispatching Gemini analysis for run ${runId}...`);
-  const result = spawn('gemini', ['-p', prompt], {
+  const result = spawn('agy', ['--dangerously-skip-permissions', '-p', '-'], {
+    input: prompt,
     timeout: 300_000,
     encoding: 'utf8'
   });
@@ -104,14 +105,15 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
 }
 
 export async function dispatchOpenChatQuestion(runId, gateId, question, agent, { spawn = spawnSync } = {}) {
-  const CLI_MAP = { gemini: 'gemini', claude: 'claude', codex: 'codex' };
+  const CLI_MAP = { gemini: 'gemini', claude: 'claude', codex: 'codex', antigravity: 'agy' };
   const cli = CLI_MAP[agent] ?? 'gemini';
   const prompt = `Steel Analyzer run: ${runId}\nGate: ${gateId}\nOwner question: ${question}\n\nAnswer concisely in the same language as the question.`;
   let result;
   if (cli === 'codex') {
     result = spawn('codex', ['exec', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
   } else {
-    result = spawn(cli, ['-p', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
+    const args = cli === 'agy' ? ['--dangerously-skip-permissions', '-p', '-'] : ['-p', '-'];
+    result = spawn(cli, args, { input: prompt, timeout: 120_000, encoding: 'utf8' });
   }
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';

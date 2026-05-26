@@ -220,4 +220,36 @@ describe('agent-tasks-daemon', () => {
 
     assert.deepEqual(order, ['p1', 'p5']);
   });
+
+  test('9. successful antigravity dispatch — maps to agy, executes with flags', async () => {
+    const taskId = 'task-agy-1';
+    const task = {
+      schema: 'pos.task.v1', id: taskId, from: 'claude', to: 'antigravity', type: 'code-review',
+      priority: 5, created_at: new Date().toISOString(), state: 'queued',
+      prompt_path: path.join(tmpDir, 'prompt.md'), cwd: tmpDir, result_path: `results/${taskId}/result.json`
+    };
+    fs.writeFileSync(path.join(tmpDir, 'prompt.md'), 'test prompt');
+    fs.writeFileSync(path.join(queueDir, taskId + '.json'), JSON.stringify(task));
+
+    let calledCmd, calledArgs, calledOpts;
+    mock.method(child_process, 'spawnSync', (cmd, args, opts) => {
+      if (cmd === 'which') {
+        calledCmd = args[0];
+        return { status: 0 };
+      }
+      calledCmd = cmd;
+      calledArgs = args;
+      calledOpts = opts;
+      return { status: 0, stdout: '<<<POS_RESULT>>>\n{"verdict":"APPROVE","findings":[]}\n<<<END>>>' };
+    });
+
+    await daemon.poll();
+
+    assert.equal(calledCmd, 'agy');
+    assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '-p', '-']);
+    assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('<<<POS_RESULT>>>'));
+    assert.ok(fs.existsSync(path.join(resultsDir, taskId, 'result.json')));
+    const result = JSON.parse(fs.readFileSync(path.join(resultsDir, taskId, 'result.json'), 'utf8'));
+    assert.equal(result.verdict, 'APPROVE');
+  });
 });

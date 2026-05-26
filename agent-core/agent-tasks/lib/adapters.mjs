@@ -42,6 +42,18 @@ export function claudeAdapter(task, promptPath) {
   return { stdout: result.stdout || '', exitCode: result.status };
 }
 
+export function antigravityAdapter(task, promptPath) {
+  const prompt = fs.readFileSync(promptPath, 'utf8');
+  const result = child_process.spawnSync('agy', ['--dangerously-skip-permissions', '-p', '-'], {
+    input: prompt,
+    cwd: task.cwd,
+    timeout: (task.timeout_sec || 600) * 1000,
+    encoding: 'utf8',
+    maxBuffer: 50 * 1024 * 1024
+  });
+  return { stdout: result.stdout || '', exitCode: result.status };
+}
+
 export function injectSentinel(promptPath) {
   const content = fs.readFileSync(promptPath, 'utf8');
   const sentinelBlock = `
@@ -77,5 +89,6 @@ export function parseVerdict(stdout) {
 export const ADAPTER_MAP = {
   codex: codexAdapter,
   gemini: geminiAdapter,
-  claude: claudeAdapter
+  claude: claudeAdapter,
+  antigravity: antigravityAdapter
 };

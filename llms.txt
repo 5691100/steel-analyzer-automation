@@ -77,13 +77,15 @@ agent-core/
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
     telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
-    pipeline-runner.mjs               runPipeline(): 5-gate flow (Gemini, QA, Correction, Codex, Upload) (220 lines)
+    pipeline-runner.mjs               runPipeline(): 5-gate flow (Gemini, QA, Correction, Codex, Upload); uploads .html alongside .xlsx (220 lines)
     gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
-    llm-dispatcher.mjs                dispatchGeminiAnalysis(), dispatchOpenChatQuestion() (119 lines)
+    llm-dispatcher.mjs                dispatchGeminiAnalysis(), dispatchOpenChatQuestion() (121 lines) — stale cleanup post-generation, narrow patterns
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
+    template-config.mjs               Externalized template config: sheet names, column defs, category aliases (198 lines)
+    dashboard-generator.mjs           generateDashboard() -> dashboard.html; uploaded to Drive with xlsx (206 lines)
     prompts/
-      steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini (33 lines)
-    workbook-generator.mjs            JSON -> xlsx via ExcelJS (341 lines)
+      steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini, schema-aligned field names (150 lines)
+    workbook-generator.mjs            JSON -> xlsx via ExcelJS: sheet sanitizer, Description sheets, versioning (604 lines)
     artifact-verifier.mjs             Output directory checker (60 lines)
   steel-bus/
     lib/state-machine.mjs             Pure state machine, 17 states
@@ -117,5 +119,5 @@ docs/
 
 `requested` -> `sources_manifested` -> `sources_downloaded` -> `extraction_done` -> `workbooks_generated` -> `workbooks_validated` -> `producer_handoff_done` -> `claude_review_requested` -> `claude_review_passed` | `claude_review_blocked` -> `codex_integration_requested` -> `codex_integration_done` -> `gepa_proposed` -> `gepa_reviewed` -> `upload_ready` -> `uploaded_verified` -> `closed` | `dead_letter`
 
-<!-- sprint:13 -->
-<!-- updated-by-superflow:2026-05-25 -->
+<!-- sprint:14 -->
+<!-- updated-by-superflow:2026-05-26 -->

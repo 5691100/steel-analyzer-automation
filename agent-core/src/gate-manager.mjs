@@ -5,11 +5,11 @@ export const pendingGates = new Map(); // runId → { gateId, resolve }
 export const chatQuestionState = new Map(); // chatId → { runId, gateId, agent }
 
 export const GATE_AGENT = {
-  g1_gemini: 'gemini',
+  g1_gemini: 'antigravity',
   g2_qa: 'claude',
-  g3_correction: 'gemini',
+  g3_correction: 'antigravity',
   g4_codex: 'codex',
-  g5_upload: 'gemini',
+  g5_upload: 'antigravity',
 };
 
 export const GATE_PROMPTS = {

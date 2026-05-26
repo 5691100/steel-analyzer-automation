@@ -5,7 +5,7 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
-import { dispatchGeminiAnalysis } from './llm-dispatcher.mjs';
+import { dispatchGeminiAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
 import { resolveGate } from './gate-manager.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 
@@ -19,11 +19,7 @@ function log(runDir, signal) {
   fs.appendFileSync(ledger, JSON.stringify({ ...signal, created_at: new Date().toISOString() }) + '\n', 'utf8');
 }
 
-async function dispatchClaudeQA(runId, runDir) {
-  const result = { verdict: 'ACCEPTED', notes: 'Auto-accepted (QA not yet wired)' };
-  fs.writeFileSync(path.join(runDir, 'qa-result.json'), JSON.stringify(result, null, 2), 'utf8');
-  return result;
-}
+
 
 function defaultMakeGateKb(runId, gateId) {
   return {
@@ -61,7 +57,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
   getDrive = getDriveClient,
   doDownload = download,
   doAnalysis = dispatchGeminiAnalysis,
-  doQA = dispatchClaudeQA,
+  doQA = dispatchAntigravityQA,
   doUpload = driveUpload,
   doPublish = defaultPublishRun,
   makeGateKb = defaultMakeGateKb,

@@ -27,7 +27,7 @@ Test files: `agent-core/test/*.test.mjs`
 | `agent-core/src/pipeline-runner.mjs` (220 lines) | `runPipeline(runId, folderId, notifyFn)` — 5-gate pipeline (G1:Gemini, G2:QA, G3:correction loop ×3, G4:CodexClaw, G5:upload), upload inside pipeline. |
 | `agent-core/src/gate-manager.mjs` (62 lines) | Pending gate registry (pendingGates Map), InlineKeyboard factory, resolveGate, GATE_AGENT/GATE_PROMPTS/GATE_HELP constants. |
 | `agent-core/src/publish-run.mjs` (161 lines) | `publishRun(runId, runDir, repoRoot, options)` — writes `dashboard/runs/<run_id>.json`, updates `dashboard/runs/index.json`, then runs `git pull --rebase` (with Basic auth if `GITHUB_TOKEN` set), `git add dashboard/runs/`, `git commit`, and `git push` unless `dryRun` is set. On failure: step-aware rollback (`reset HEAD~1` for push, `reset HEAD --` for commit) + `git clean` scoped to the two written files. |
-| `agent-core/src/llm-dispatcher.mjs` (121 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `gemini -p <prompt>` via `spawnSync`, parses JSON, generates workbooks, verifies output. Stale xlsx cleanup runs post-generation only (narrow patterns: `*_BoM*`, `*_MaterialList*`, `*_Description*`). Also `dispatchOpenChatQuestion`. |
+| `agent-core/src/llm-dispatcher.mjs` (121 lines) | `dispatchGeminiAnalysis(runId, runDir, sourcesDir)` — calls `agy --dangerously-skip-permissions -p -` via `spawnSync` (stdin), parses JSON, generates workbooks, verifies output. Stale xlsx cleanup runs post-generation only (narrow patterns: `*_BoM*`, `*_MaterialList*`, `*_Description*`). Also `dispatchOpenChatQuestion`. |
 | `agent-core/src/prompts/steel-analysis-prompt.mjs` (150 lines) | `buildAnalysisPrompt(runId, sourceTexts)` — builds the structured Gemini prompt from source `.txt` files. Aligned to unified schema field names (`file_name`, `source_type` in `sources_detail`). |
 | `agent-core/src/template-config.mjs` (198 lines) | Externalized template configuration: sheet names, column definitions, category aliases, description sheet structure. Single source of truth for workbook layout. |
 | `agent-core/src/dashboard-generator.mjs` (206 lines) | `generateDashboard(data, outputPath)` — generates `dashboard.html` in `runDir/output/`. Uploaded to Drive alongside xlsx files. HTML-escaped throughout. Null-guarded for missing `totals`. |
@@ -70,7 +70,7 @@ Pass via `--owner-approval` flag to steel-drive.mjs. Token is scoped to the spec
 ## Agent Tasks
 
 File-based multi-runtime task dispatch. PM2 daemon polls `agent-core/agent-tasks/queue/`,
-dispatches to Codex/Gemini/Claude via spawnSync (stdin), writes results to `results/<id>/`.
+dispatches to Codex/AntigravityClaw/Claude via spawnSync (stdin), writes results to `results/<id>/`.
 
 - **Daemon**: `pm2 start ecosystem.config.cjs` includes `agent-tasks-daemon`
 - **Manual dispatch**: `node agent-core/agent-tasks/bin/pos-dispatch.mjs <task-id>`

@@ -31,13 +31,16 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   }
 
   const MAX_SOURCE_CHARS = 80_000;
+  const MAX_DRAWING_CHARS = 20_000;
+  const DRAWING_PATTERN = /teräs(?:kokoonpanot|osakuvat)/i;
   const files = fs.readdirSync(sourcesDir).filter(f => f.endsWith('.txt'));
   const sourceTexts = {};
   for (const file of files) {
     let text = fs.readFileSync(path.join(sourcesDir, file), 'utf8');
-    if (text.length > MAX_SOURCE_CHARS) {
-      console.warn(`Truncating ${file} (${text.length} chars → ${MAX_SOURCE_CHARS})`);
-      text = text.slice(0, MAX_SOURCE_CHARS) + '\n[TRUNCATED]';
+    const limit = DRAWING_PATTERN.test(file) ? MAX_DRAWING_CHARS : MAX_SOURCE_CHARS;
+    if (text.length > limit) {
+      console.warn(`Truncating ${file} (${text.length} chars → ${limit})`);
+      text = text.slice(0, limit) + '\n[TRUNCATED]';
     }
     sourceTexts[file] = text;
   }
@@ -50,7 +53,8 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '15m', '-p', '-'], {
     input: prompt,
     timeout: 1_200_000,
-    encoding: 'utf8'
+    encoding: 'utf8',
+    cwd: '/tmp'
   });
   const elapsedSec = ((Date.now() - dispatchStart) / 1000).toFixed(1);
   const stdoutBytes = (result.stdout ?? '').length;

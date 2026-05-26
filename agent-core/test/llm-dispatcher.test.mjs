@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { dispatchOpenChatQuestion, dispatchGeminiAnalysis } from '../src/llm-dispatcher.mjs';
+import { dispatchOpenChatQuestion, dispatchGeminiAnalysis, dispatchAntigravityQA } from '../src/llm-dispatcher.mjs';
 
 describe('dispatchOpenChatQuestion', () => {
   it('returns a string answer for a gemini agent (mocked spawn)', async () => {
@@ -93,6 +93,107 @@ describe('dispatchGeminiAnalysis', () => {
     assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '--print-timeout', '60m', '-p', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('run-123'));
     assert.equal(calledOpts.cwd, '/tmp');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
+describe('dispatchGeminiAnalysis customComment', () => {
+  it('appends customComment to the prompt sent to agy', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-comment-test-'));
+    const runDir = path.join(tempDir, 'run');
+    const sourcesDir = path.join(runDir, 'sources');
+    fs.mkdirSync(sourcesDir, { recursive: true });
+    fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
+
+    let capturedInput;
+    await dispatchGeminiAnalysis('run-comment', runDir, sourcesDir, {
+      spawn: (_cmd, _args, opts) => {
+        capturedInput = opts.input;
+        return {
+          stdout: JSON.stringify({
+            project_name: 'P', subprojects: [{ name: 'All', totals: { weight_kg: 0, paint_m2: 0 }, profiles: [] }]
+          }),
+          status: 0
+        };
+      },
+      generate: async () => {},
+      generateDash: () => {},
+      verify: () => ({ ok: true, errors: [], files: [] }),
+      customComment: 'Обратить внимание на покрытие балок'
+    });
+
+    assert.ok(capturedInput.includes('Обратить внимание на покрытие балок'), 'prompt must include customComment');
+    assert.ok(capturedInput.includes('Дополнительные указания'), 'prompt must include header');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
+describe('dispatchAntigravityQA', () => {
+  it('returns ACCEPTED when agy returns valid ACCEPTED JSON', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
+    const runDir = path.join(tempDir, 'run');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify({ project_name: 'Test', subprojects: [] }), 'utf8');
+
+    const result = await dispatchAntigravityQA('run-qa-1', runDir, {
+      spawn: () => ({
+        stdout: JSON.stringify({ verdict: 'ACCEPTED', notes: 'All good' }),
+        stderr: '',
+        status: 0,
+        error: null
+      })
+    });
+
+    assert.equal(result.verdict, 'ACCEPTED');
+    assert.equal(result.notes, 'All good');
+    const qaFile = JSON.parse(fs.readFileSync(path.join(runDir, 'qa-result.json'), 'utf8'));
+    assert.equal(qaFile.verdict, 'ACCEPTED');
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns BLOCKED when agy returns BLOCKED', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
+    const runDir = path.join(tempDir, 'run');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+
+    const result = await dispatchAntigravityQA('run-qa-2', runDir, {
+      spawn: () => ({
+        stdout: JSON.stringify({ verdict: 'BLOCKED', notes: 'Missing weights' }),
+        stderr: '',
+        status: 0,
+        error: null
+      })
+    });
+
+    assert.equal(result.verdict, 'BLOCKED');
+    assert.ok(result.notes.includes('Missing weights'));
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns BLOCKED when gemini-analysis.json does not exist', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
+    const runDir = path.join(tempDir, 'run');
+    fs.mkdirSync(runDir, { recursive: true });
+
+    const result = await dispatchAntigravityQA('run-qa-3', runDir);
+    assert.equal(result.verdict, 'BLOCKED');
+    assert.ok(result.notes.includes('not found'));
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns BLOCKED when agy process fails', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
+    const runDir = path.join(tempDir, 'run');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+
+    const result = await dispatchAntigravityQA('run-qa-4', runDir, {
+      spawn: () => ({ stdout: '', stderr: 'crash', status: 1, error: null })
+    });
+
+    assert.equal(result.verdict, 'BLOCKED');
+    assert.ok(result.notes.includes('failed'));
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 });

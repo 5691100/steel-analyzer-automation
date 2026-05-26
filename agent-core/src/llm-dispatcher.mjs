@@ -19,7 +19,8 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   spawn = spawnSync,
   generate = generateWorkbooks,
   generateDash = generateDashboard,
-  verify = verifyRunOutput
+  verify = verifyRunOutput,
+  customComment = null
 } = {}) {
   // Convert PDFs to text if .txt counterparts are missing
   for (const file of fs.readdirSync(sourcesDir).filter(f => f.endsWith('.pdf'))) {
@@ -45,7 +46,10 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
     sourceTexts[file] = text;
   }
 
-  const prompt = buildAnalysisPrompt(runId, sourceTexts);
+  let prompt = buildAnalysisPrompt(runId, sourceTexts);
+  if (customComment) {
+    prompt += `\n\n⚠️ Дополнительные указания заказчика по этому проекту:\n${customComment}\n`;
+  }
 
   const promptChars = prompt.length;
   console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars)...`);
@@ -149,4 +153,58 @@ export async function dispatchOpenChatQuestion(runId, gateId, question, agent, {
     throw new Error(`dispatchOpenChatQuestion failed (${cli}): ${detail}`);
   }
   return (result.stdout ?? '').trim() || '(no answer)';
+}
+
+export async function dispatchAntigravityQA(runId, runDir, { spawn = spawnSync } = {}) {
+  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  if (!fs.existsSync(analysisPath)) {
+    return { verdict: 'BLOCKED', notes: 'gemini-analysis.json not found — nothing to verify' };
+  }
+  const analysisJson = fs.readFileSync(analysisPath, 'utf8');
+
+  const prompt = `You are a QA reviewer for a steel structure analysis.
+Review the following JSON analysis output and check for:
+1. Missing or null weights where data should exist
+2. Category assignment violations (profiles without categories)
+3. Totals mismatches (sum of profile weights vs reported totals)
+4. Empty subprojects array
+5. Missing project_name or project_no
+
+Return ONLY a JSON object with two fields:
+- "verdict": "ACCEPTED" if no critical issues found, "BLOCKED" if critical issues exist
+- "notes": brief description of findings (one line)
+
+Analysis JSON:
+${analysisJson}`;
+
+  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '10m', '-p', '-'], {
+    input: prompt,
+    timeout: 900_000,
+    encoding: 'utf8',
+    cwd: '/tmp'
+  });
+
+  const qaLogPath = path.join(runDir, 'agy-qa.log');
+  fs.writeFileSync(qaLogPath, `=== QA run ${runId} ===\nstatus: ${result.status}\n\n--- STDOUT ---\n${result.stdout ?? ''}\n--- STDERR ---\n${result.stderr ?? ''}`, 'utf8');
+
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';
+    return { verdict: 'BLOCKED', notes: `agy QA process failed: ${detail}` };
+  }
+
+  const stdout = (result.stdout ?? '').trim();
+  try {
+    const jsonMatch = stdout.match(/\{[\s\S]*}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : stdout);
+    const qaResult = {
+      verdict: parsed.verdict === 'ACCEPTED' ? 'ACCEPTED' : 'BLOCKED',
+      notes: parsed.notes || ''
+    };
+    fs.writeFileSync(path.join(runDir, 'qa-result.json'), JSON.stringify(qaResult, null, 2), 'utf8');
+    return qaResult;
+  } catch (err) {
+    const fallback = { verdict: 'BLOCKED', notes: `Failed to parse QA JSON: ${err.message}` };
+    fs.writeFileSync(path.join(runDir, 'qa-result.json'), JSON.stringify(fallback, null, 2), 'utf8');
+    return fallback;
+  }
 }

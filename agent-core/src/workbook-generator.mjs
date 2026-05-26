@@ -36,7 +36,7 @@ function addWorksheetSafe(workbook, name) {
 
 function sanitizeFilename(name) {
   if (!name) return 'unnamed';
-  return name.replace(/[/\:*?"<>|]/g, '_');
+  return name.replace(/[\\/:*?"<>|]/g, '_');
 }
 
 function validateInput(data) {
@@ -55,9 +55,10 @@ async function getNextVersionSuffix(outputDir, basePrefix, existingFiles = []) {
     const descExists = exists(basePrefix + '_Description' + s + '.xlsx');
     if (!bomExists && !mlExists && !descExists) return s;
     version++;
-    if (version > 50) break;
+    if (version > 50) {
+      throw new Error('Too many versions (>50) for this run — check for stuck retry loop');
+    }
   }
-  return '';
 }
 
 function applyTableStyle(sheet, startRow, endRow, colCount) {

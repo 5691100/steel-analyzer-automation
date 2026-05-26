@@ -18,7 +18,7 @@
     "schema": { "const": "pos.task.v1" },
     "id": { "type": "string" },
     "from": { "type": "string" },
-    "to": { "enum": ["codex", "gemini", "claude"] },
+    "to": { "enum": ["codex", "gemini", "claude", "antigravity"] },
     "type": { "enum": ["code-review", "code-fix", "analysis", "implementation"] },
     "priority": { "type": "integer", "minimum": 1, "maximum": 10, "default": 5 },
     "created_at": { "type": "string", "format": "date-time" },

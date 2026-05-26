@@ -5,6 +5,8 @@ import child_process from 'node:child_process';
 import { ADAPTER_MAP, injectSentinel, parseVerdict } from './adapters.mjs';
 import { validateTask } from './task-schema.mjs';
 
+const BIN_MAP = { antigravity: 'agy', gemini: 'gemini', codex: 'codex', claude: 'claude' };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function getPaths() {
@@ -146,7 +148,7 @@ export async function poll() {
     fs.unlinkSync(claimingPath); // убираем claiming файл
 
     const adapter = ADAPTER_MAP[task.to];
-    const cli = task.to;
+    const cli = BIN_MAP[task.to] ?? task.to;
 
     const which = child_process.spawnSync('which', [cli]);
     if (which.status !== 0) {

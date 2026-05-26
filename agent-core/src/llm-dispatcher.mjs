@@ -21,26 +21,53 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   generateDash = generateDashboard,
   verify = verifyRunOutput
 } = {}) {
+  // Convert PDFs to text if .txt counterparts are missing
+  for (const file of fs.readdirSync(sourcesDir).filter(f => f.endsWith('.pdf'))) {
+    const txtPath = path.join(sourcesDir, file.replace(/\.pdf$/i, '.txt'));
+    if (!fs.existsSync(txtPath)) {
+      const r = spawnSync('pdftotext', [path.join(sourcesDir, file), txtPath], { encoding: 'utf8' });
+      if (r.status !== 0) console.warn(`pdftotext failed for ${file}: ${r.stderr}`);
+    }
+  }
+
+  const MAX_SOURCE_CHARS = 80_000;
   const files = fs.readdirSync(sourcesDir).filter(f => f.endsWith('.txt'));
   const sourceTexts = {};
   for (const file of files) {
-    sourceTexts[file] = fs.readFileSync(path.join(sourcesDir, file), 'utf8');
+    let text = fs.readFileSync(path.join(sourcesDir, file), 'utf8');
+    if (text.length > MAX_SOURCE_CHARS) {
+      console.warn(`Truncating ${file} (${text.length} chars → ${MAX_SOURCE_CHARS})`);
+      text = text.slice(0, MAX_SOURCE_CHARS) + '\n[TRUNCATED]';
+    }
+    sourceTexts[file] = text;
   }
 
   const prompt = buildAnalysisPrompt(runId, sourceTexts);
 
-  console.log(`Dispatching Gemini analysis for run ${runId}...`);
-  const result = spawn('agy', ['--dangerously-skip-permissions', '-p', '-'], {
+  const promptChars = prompt.length;
+  console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars)...`);
+  const dispatchStart = Date.now();
+  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '15m', '-p', '-'], {
     input: prompt,
-    timeout: 300_000,
+    timeout: 1_200_000,
     encoding: 'utf8'
   });
+  const elapsedSec = ((Date.now() - dispatchStart) / 1000).toFixed(1);
+  const stdoutBytes = (result.stdout ?? '').length;
+  const stderrBytes = (result.stderr ?? '').length;
+  console.log(`agy finished: status=${result.status ?? 'null'} elapsed=${elapsedSec}s stdout=${stdoutBytes}B stderr=${stderrBytes}B`);
+
+  // Always persist agy output for post-mortem analysis
+  const agyLogPath = path.join(runDir, 'agy-run.log');
+  const logHeader = `=== agy run ${runId} ===\nstart: ${new Date(dispatchStart).toISOString()}\nelapsed: ${elapsedSec}s\nstatus: ${result.status ?? 'null'}\nprompt_chars: ${promptChars}\nstdout_bytes: ${stdoutBytes}\nstderr_bytes: ${stderrBytes}\n\n--- STDOUT ---\n`;
+  const logFooter = stderrBytes > 0 ? `\n\n--- STDERR ---\n${result.stderr}` : '';
+  fs.writeFileSync(agyLogPath, logHeader + (result.stdout ?? '') + logFooter, 'utf8');
 
   if (result.error) {
     throw result.error;
   }
 
-  const stdout = result.stdout.trim();
+  const stdout = (result.stdout ?? '').trim();
   let analysis;
 
   try {
@@ -48,9 +75,7 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
     const jsonStr = jsonMatch ? jsonMatch[0] : stdout;
     analysis = JSON.parse(jsonStr);
   } catch (err) {
-    const rawPath = path.join(runDir, 'gemini-raw.txt');
-    fs.writeFileSync(rawPath, stdout, 'utf8');
-    throw new Error(`Failed to parse Gemini JSON output. Raw output saved to ${rawPath}. Error: ${err.message}`);
+    throw new Error(`Failed to parse Gemini JSON output. Raw output saved to ${agyLogPath}. Error: ${err.message}`);
   }
 
   let folderName = 'Unknown';

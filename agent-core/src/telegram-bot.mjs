@@ -294,7 +294,7 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
   // approve or reject — resolve the gate
   const resolved = resolveGate(runId, gateId, decision);
   if (!resolved) {
-    await ctx.answerCallbackQuery({ text: 'Gate expired or not found', show_alert: true });
+    await ctx.answerCallbackQuery({ text: 'Gate expired or not found', show_alert: true }).catch(() => {});
     return;
   }
 
@@ -307,9 +307,11 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 process.once('SIGINT', () => bot.stop());
 process.once('SIGTERM', () => bot.stop());
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+bot.catch((err) => {
+  console.error('[bot.catch] Non-fatal error:', err.message ?? err);
+});
 
-if (isMain) {
+if (!process.env.NODE_TEST_CONTEXT) {
   bot.start().catch(err => {
     console.error('Bot failed to start:', err);
     process.exit(1);

@@ -259,10 +259,10 @@ function addMaterialTotalRow(sheet, rowIdx, firstLabel = 'Total') {
     '',
     '',
     '',
-    { formula: `SUM(G4:G${rowIdx - 1})` },
+    { formula: `SUBTOTAL(109,G4:G${rowIdx - 1})` },
     '',
-    { formula: `SUM(I4:I${rowIdx - 1})` },
-    { formula: `SUM(J4:J${rowIdx - 1})` },
+    { formula: `SUBTOTAL(109,I4:I${rowIdx - 1})` },
+    { formula: `SUBTOTAL(109,J4:J${rowIdx - 1})` },
     '',
     '',
     '',
@@ -333,11 +333,11 @@ async function generateBoM(data, filePath) {
     totalRow.values = [
       'Total',
       '',
-      { formula: `SUM(C4:C${rowIdx - 2})` },
-      { formula: `SUM(D4:D${rowIdx - 2})` },
-      { formula: `SUM(E4:E${rowIdx - 2})` },
+      { formula: `SUBTOTAL(109,C4:C${rowIdx - 2})` },
+      { formula: `SUBTOTAL(109,D4:D${rowIdx - 2})` },
+      { formula: `SUBTOTAL(109,E4:E${rowIdx - 2})` },
       { formula: `G${rowIdx - 1}/D${rowIdx - 1}` },
-      { formula: `SUM(G4:G${rowIdx - 2})` }
+      { formula: `SUBTOTAL(109,G4:G${rowIdx - 2})` }
     ];
     totalRow.eachCell(cell => { cell.fill = WORKBOOK_STYLE.totalFill; });
   }
@@ -346,9 +346,22 @@ async function generateBoM(data, filePath) {
   const catSheet = addWorksheetSafe(workbook, 'BoM by Category');
   setHeaders(catSheet, 3, BOM_CAT_COLUMNS);
   let catRowIdx = 4;
-  aggregateProfiles(data, true).forEach(p => {
+  const catProfiles = aggregateProfiles(data, true);
+  catProfiles.forEach(p => {
     catSheet.getRow(catRowIdx++).values = [p.category, p.profile, p.steel_grade, p.length_m, p.weight_t, p.paint_m2];
   });
+  if (catProfiles.length > 0) {
+    const totalRow = catSheet.getRow(catRowIdx++);
+    totalRow.values = [
+      'Total',
+      '',
+      '',
+      { formula: `SUBTOTAL(109,D4:D${catRowIdx - 2})` },
+      { formula: `SUBTOTAL(109,E4:E${catRowIdx - 2})` },
+      { formula: `SUBTOTAL(109,F4:F${catRowIdx - 2})` }
+    ];
+    totalRow.eachCell(cell => { cell.fill = WORKBOOK_STYLE.totalFill; });
+  }
   applyTableStyle(catSheet, 3, catRowIdx - 1, BOM_CAT_COLUMNS.length);
   await workbook.xlsx.writeFile(filePath);
 }

@@ -1,6 +1,6 @@
 # steel-analyzer-automation
 
-Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs Gemini-based extraction, generates Excel workbooks, performs QA review, integrates via CodexClaw, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
+Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs AntigravityClaw (agy) extraction, generates Excel workbooks, performs QA review, integrates via CodexClaw, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
 
 ## Stack
 
@@ -15,12 +15,12 @@ Automated steel structure analysis pipeline. Accepts raw project files from Goog
 telegram-bot.mjs (Drive-link intake, /run, /status, /cancel, Open-chat mode)
   -> pipeline-runner.mjs (runPipeline, 5-gate flow, maxCorrections=3)
       -> steel-drive.mjs download (User OAuth, MD5-verified)
-      -> llm-dispatcher.mjs (Gemini analysis, Open-chat dispatch)
+      -> llm-dispatcher.mjs (AntigravityClaw analysis via agy, Open-chat dispatch)
           -> steel-analysis-prompt.mjs (buildAnalysisPrompt)
           -> workbook-generator.mjs (JSON -> 3 xlsx)
           -> artifact-verifier.mjs (output check)
       -> Gate Registry (gate-manager.mjs):
-          - G1: Gemini (Approve/Reject/Defer/Clarify/Open-chat)
+          - G1: AntigravityClaw/agy (Approve/Reject/Defer/Clarify/Open-chat)
           - G2: QA Review
           - G3: Correction Loop (up to 3 attempts)
           - G4: CodexClaw Integration
@@ -77,14 +77,14 @@ agent-core/
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
     telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
-    pipeline-runner.mjs               runPipeline(): 5-gate flow (Gemini, QA, Correction, Codex, Upload); uploads .html alongside .xlsx (220 lines)
+    pipeline-runner.mjs               runPipeline(): 5-gate flow (AntigravityClaw/agy, QA, Correction, Codex, Upload); uploads .html alongside .xlsx (220 lines)
     gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
     llm-dispatcher.mjs                dispatchGeminiAnalysis(), dispatchOpenChatQuestion() (121 lines) — stale cleanup post-generation, narrow patterns
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     template-config.mjs               Externalized template config: sheet names, column defs, category aliases (198 lines)
     dashboard-generator.mjs           generateDashboard() -> dashboard.html; uploaded to Drive with xlsx (206 lines)
     prompts/
-      steel-analysis-prompt.mjs       buildAnalysisPrompt() for Gemini, schema-aligned field names (150 lines)
+      steel-analysis-prompt.mjs       buildAnalysisPrompt() for AntigravityClaw/agy, schema-aligned field names (150 lines)
     workbook-generator.mjs            JSON -> xlsx via ExcelJS: sheet sanitizer, Description sheets, versioning (604 lines)
     artifact-verifier.mjs             Output directory checker (60 lines)
   steel-bus/
@@ -98,7 +98,7 @@ agent-core/
   agent-tasks/
     bin/pos-daemon.mjs               PM2 entrypoint for agent-tasks daemon
     bin/pos-dispatch.mjs             Manual dispatch CLI (--replay for dead-letter)
-    lib/adapters.mjs                 codex/gemini/claude adapters, injectSentinel, parseVerdict (last-match)
+    lib/adapters.mjs                 codex/antigravity(agy)/gemini/claude adapters, injectSentinel, parseVerdict (last-match)
     lib/daemon.mjs                   Poll loop (5s), atomic claim, orphan recovery, priority sort
     lib/task-schema.mjs              Ajv schema validator for pos.task.v1
     lib/result-schema.mjs            Ajv schema validator for pos.result.v1

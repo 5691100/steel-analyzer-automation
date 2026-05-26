@@ -188,16 +188,16 @@ export async function runPipeline(runId, folderId, notifyFn, {
     // Perform upload
     const outputDir = path.join(runDir, 'output');
     const approvalToken = expectedApprovalToken(runId, folderId);
-    const xlsxFiles = fs.existsSync(outputDir)
-      ? fs.readdirSync(outputDir).filter(f => f.endsWith('.xlsx'))
+    const filesToUpload = fs.existsSync(outputDir)
+      ? fs.readdirSync(outputDir).filter(f => f.endsWith('.xlsx') || f.endsWith('.html'))
       : [];
 
-    if (xlsxFiles.length === 0) {
-      throw new Error('No .xlsx files found in output directory — nothing to upload');
+    if (filesToUpload.length === 0) {
+      throw new Error('No .xlsx or .html files found in output directory — nothing to upload');
     }
 
     const uploadResults = [];
-    for (const file of xlsxFiles) {
+    for (const file of filesToUpload) {
       const res = await doUpload(runId, folderId, path.join(outputDir, file), approvalToken);
       uploadResults.push(res);
     }

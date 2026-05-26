@@ -236,14 +236,15 @@ describe('Sprint 14 Template Decisions', () => {
     }
   });
 
-  it('should remove stale xlsx files before workbook generation', async () => {
+  it('should remove stale xlsx files after successful workbook generation', async () => {
     const runDir = path.join(tempDir, 'run');
     const sourcesDir = path.join(runDir, 'sources');
     const outputDir = path.join(runDir, 'output');
     fs.mkdirSync(sourcesDir, { recursive: true });
     fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
-    fs.writeFileSync(path.join(outputDir, 'stale.xlsx'), 'old workbook', 'utf8');
+    fs.writeFileSync(path.join(outputDir, 'stale_BoM.xlsx'), 'old workbook', 'utf8');
+    fs.writeFileSync(path.join(outputDir, 'stale.xlsx'), 'old non-matching workbook', 'utf8');
     fs.writeFileSync(path.join(outputDir, 'keep.txt'), 'keep', 'utf8');
 
     await dispatchGeminiAnalysis('run-1', runDir, sourcesDir, {
@@ -255,11 +256,22 @@ describe('Sprint 14 Template Decisions', () => {
         status: 0
       }),
       generate: async (_analysis, out) => {
-        assert.deepStrictEqual(fs.readdirSync(out), ['keep.txt']);
+        // Stale files are still present during generation
+        const files = fs.readdirSync(out);
+        assert.ok(files.includes('stale_BoM.xlsx'));
+        assert.ok(files.includes('stale.xlsx'));
+        assert.ok(files.includes('keep.txt'));
         fs.writeFileSync(path.join(out, 'fresh.xlsx'), 'new workbook', 'utf8');
       },
       generateDash: () => {},
       verify: () => ({ ok: true, errors: [], files: [] })
     });
+
+    // Stale files matching the pattern are deleted afterwards
+    const finalFiles = fs.readdirSync(outputDir);
+    assert.strictEqual(finalFiles.includes('stale_BoM.xlsx'), false, 'stale_BoM.xlsx should be deleted');
+    assert.ok(finalFiles.includes('stale.xlsx'), 'stale.xlsx should be kept (non-matching pattern)');
+    assert.ok(finalFiles.includes('keep.txt'), 'keep.txt should be kept');
+    assert.ok(finalFiles.includes('fresh.xlsx'), 'fresh.xlsx should be kept');
   });
 });

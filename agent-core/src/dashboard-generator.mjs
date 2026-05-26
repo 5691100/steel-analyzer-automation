@@ -10,8 +10,8 @@ export function generateDashboard(data, outputDir) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const totalWeight = data.subprojects.reduce((acc, sp) => acc + (sp.totals.weight_kg || 0) / 1000, 0);
-  const totalArea = data.subprojects.reduce((acc, sp) => acc + (sp.totals.paint_m2 || 0), 0);
+  const totalWeight = data.subprojects.reduce((acc, sp) => acc + (sp.totals?.weight_kg ?? 0) / 1000, 0);
+  const totalArea = data.subprojects.reduce((acc, sp) => acc + (sp.totals?.paint_m2 ?? 0), 0);
   const issueCount = (data.open_questions?.length || 0) + (data.analysis_warnings?.length || 0);
   const primarySources = (data.sources_detail || []).filter(s => s.priority === 'Primary');
 
@@ -110,8 +110,8 @@ export function generateDashboard(data, outputDir) {
                     ${data.subprojects.map(sp => `
                         <tr>
                             <td>${escHtml(sp.name)}</td>
-                            <td>${((sp.totals.weight_kg || 0) / 1000).toFixed(2)}</td>
-                            <td>${(sp.totals.paint_m2 || 0).toFixed(2)}</td>
+                            <td>${((sp.totals?.weight_kg ?? 0) / 1000).toFixed(2)}</td>
+                            <td>${(sp.totals?.paint_m2 ?? 0).toFixed(2)}</td>
                             <td>${escHtml(sp.coating_summary || 'N/A')}</td>
                             <td>${escHtml(sp.fire_summary || 'N/A')}</td>
                             <td>${escHtml(sp.transport_summary || 'N/A')}</td>
@@ -180,12 +180,16 @@ export function generateDashboard(data, outputDir) {
             <span class="arrow">▼</span>
         </div>
         <div class="section-content">
-            ${primarySources.length > 0 ? primarySources.map(s => `
+            ${primarySources.length > 0 ? primarySources.map(s => {
+                const title = s.file_name || s.name || '';
+                const subtitle = s.source_type || s.type || '';
+                return `
                 <div class="source-item">
-                    <div class="source-name">${escHtml(s.name)}</div>
-                    <div class="source-meta">${escHtml(s.type)} &bull; Used for: ${escHtml(s.used_for)}</div>
+                    <div class="source-name">${escHtml(title)}</div>
+                    <div class="source-meta">${escHtml(subtitle)} &bull; Used for: ${escHtml(s.used_for)}</div>
                 </div>
-            `).join('') : '<p style="color: #86868b;">No primary sources listed.</p>'}
+                `;
+            }).join('') : '<p style="color: #86868b;">No primary sources listed.</p>'}
         </div>
     </div>
 

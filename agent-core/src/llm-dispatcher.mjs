@@ -71,15 +71,23 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   }
 
   const outputDir = path.join(runDir, 'output');
+  const existingFiles = fs.existsSync(outputDir) ? fs.readdirSync(outputDir) : [];
+  await generate(analysis, outputDir, { existingFiles });
+
   if (fs.existsSync(outputDir)) {
-    for (const file of fs.readdirSync(outputDir)) {
-      if (file.endsWith('.xlsx')) {
-        fs.rmSync(path.join(outputDir, file), { force: true });
+    for (const file of existingFiles) {
+      if (file.endsWith('.xlsx') && (
+        file.includes('_BoM') ||
+        file.includes('_MaterialList') ||
+        file.includes('_Description')
+      )) {
+        const filePath = path.join(outputDir, file);
+        if (fs.existsSync(filePath)) {
+          fs.rmSync(filePath, { force: true });
+        }
       }
     }
   }
-  const existingFiles = fs.existsSync(outputDir) ? fs.readdirSync(outputDir) : [];
-  await generate(analysis, outputDir, { existingFiles });
 
   // Save analysis result AFTER generateWorkbooks so it includes version_string and generated_at
   const analysisPath = path.join(runDir, 'gemini-analysis.json');

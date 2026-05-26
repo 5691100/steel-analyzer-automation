@@ -87,5 +87,5 @@ dispatches to Codex/AntigravityClaw/Claude via spawnSync (stdin), writes results
 - Operations: `docs/operations/`
 
 <!-- superflow:onboarded -->
-<!-- sprint:14 -->
+<!-- sprint:15 -->
 <!-- updated-by-superflow:2026-05-26 -->

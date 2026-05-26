@@ -257,7 +257,7 @@ bot.callbackQuery(/^gate:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 
   if (decision === 'openchat') {
     await ctx.answerCallbackQuery();
-    const agent = GATE_AGENT[gateId] ?? 'gemini';
+    const agent = GATE_AGENT[gateId] ?? 'antigravity';
     chatQuestionState.set(ctx.chat.id, { runId, gateId, agent });
     await ctx.editMessageText(
       `💬 <b>Open chat</b> активирован для <code>${runId}</code>\n` +

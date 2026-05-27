@@ -3,7 +3,6 @@ import path from 'path';
 import fs_ from 'fs';
 import {
   WORKBOOK_STYLE,
-  DESCRIPTION_SHEETS,
   BOM_COLUMNS,
   BOM_CAT_COLUMNS,
   MATERIAL_LIST_COLUMNS,
@@ -13,7 +12,9 @@ import {
   TRANSPORT_DETAIL_T2_COLUMNS,
   OPEN_QUESTIONS_COLUMNS,
   SOURCES_COLUMNS,
-  CATEGORY_ORDER
+  CATEGORY_ORDER,
+  COATING_SUMMARY_COLUMNS,
+  COATING_DETAIL_COLUMNS
 } from './template-config.mjs';
 
 function sanitizeSheetName(name) {
@@ -82,7 +83,8 @@ const DESCRIPTION_SHEET_NAMES = [
   'Project Summary',
   'Scope/Classification',
   'Exclusions',
-  'Coating/Fire Evidence',
+  'Coating Summary',
+  'Coating Detail',
   'Transport Detail',
   'Open Questions',
   'Sources'
@@ -500,50 +502,43 @@ async function generateDescription(data, filePath) {
   });
   applyTableStyle(exclSheet, 3, exclRowIdx - 1, EXCLUDED_DETAIL_COLUMNS.length);
 
-  const coatSheet = descriptionSheets.get('Coating/Fire Evidence');
-  const coatSummaryColumns = ['Subproject', 'Category', 'Coating Class', 'Fire Class', 'Total Weight (t)', 'Total Paint Area (m2)', 'Profile Count'];
-  const coatDetailColumns = ['Subproject', 'Profile', 'Category', 'Steel Grade', 'Coating Class', 'Fire Class', 'Critical Temp (°C)', 'Am/V', 'Paint Area (m2)', 'Source'];
-  setHeaders(coatSheet, 3, coatSummaryColumns);
-  let coatRowIdx = 4;
-  const coatingGroups = new Map();
   const profileDetails = data.subprojects.flatMap(sp => (sp.profiles || []).map(p => ({ ...p, spName: sp.name })));
+  const coatingSummaryGroups = new Map();
   profileDetails.forEach(p => {
-    const category = categoryName(p.category);
-    const key = [p.spName, category, p.coating || '', p.fire_class || ''].join('\u0001');
-    const group = coatingGroups.get(key) || {
+    const key = [p.spName, p.coating || '', p.fire_class || ''].join('\u0001');
+    const group = coatingSummaryGroups.get(key) || {
       subproject: p.spName,
-      category,
       coating: p.coating || '',
       fire_class: p.fire_class || '',
       weight_t: 0,
-      paint_m2: 0,
-      count: 0
+      paint_m2: 0
     };
     group.weight_t += num(p.weight_kg) / 1000;
     group.paint_m2 += num(p.paint_m2);
-    group.count += 1;
-    coatingGroups.set(key, group);
+    coatingSummaryGroups.set(key, group);
   });
-  Array.from(coatingGroups.values())
-    .sort((a, b) => a.subproject.localeCompare(b.subproject) || categorySortIndex(a.category) - categorySortIndex(b.category))
+
+  const coatSummarySheet = descriptionSheets.get('Coating Summary');
+  setHeaders(coatSummarySheet, 3, COATING_SUMMARY_COLUMNS);
+  let coatSumRowIdx = 4;
+  Array.from(coatingSummaryGroups.values())
+    .sort((a, b) => a.subproject.localeCompare(b.subproject) || (a.coating || '').localeCompare(b.coating || ''))
     .forEach(group => {
-      coatSheet.getRow(coatRowIdx++).values = [
+      coatSummarySheet.getRow(coatSumRowIdx++).values = [
         group.subproject,
-        group.category,
         group.coating,
         group.fire_class,
         group.weight_t,
-        group.paint_m2,
-        group.count
+        group.paint_m2
       ];
     });
-  applyTableStyle(coatSheet, 3, Math.max(3, coatRowIdx - 1), coatSummaryColumns.length);
-  coatRowIdx++;
-  coatSheet.getRow(coatRowIdx++).values = ['PROFILE DETAIL'];
-  setHeaders(coatSheet, coatRowIdx++, coatDetailColumns);
-  const detailHeaderRow = coatRowIdx - 1;
+  applyTableStyle(coatSummarySheet, 3, Math.max(3, coatSumRowIdx - 1), COATING_SUMMARY_COLUMNS.length);
+
+  const coatDetailSheet = descriptionSheets.get('Coating Detail');
+  setHeaders(coatDetailSheet, 3, COATING_DETAIL_COLUMNS);
+  let coatDetRowIdx = 4;
   profileDetails.forEach(p => {
-    coatSheet.getRow(coatRowIdx++).values = [
+    coatDetailSheet.getRow(coatDetRowIdx++).values = [
       p.spName,
       p.profile || p.name || '',
       categoryName(p.category),
@@ -556,8 +551,7 @@ async function generateDescription(data, filePath) {
       p.source || ''
     ];
   });
-  applyTableStyle(coatSheet, detailHeaderRow, Math.max(detailHeaderRow, coatRowIdx - 1), coatDetailColumns.length);
-  updateWidthsFromRow(coatSheet, detailHeaderRow, coatDetailColumns.length);
+  applyTableStyle(coatDetailSheet, 3, Math.max(3, coatDetRowIdx - 1), COATING_DETAIL_COLUMNS.length);
 
   const transSheet = descriptionSheets.get('Transport Detail');
   transSheet.getRow(2).values = ['Table 1'];

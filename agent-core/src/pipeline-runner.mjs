@@ -1,17 +1,84 @@
 import fs from 'fs';
 import path from 'path';
+import { spawnSync } from 'child_process';
 
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
-import { dispatchGeminiAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
+import { dispatchGeminiAnalysis, dispatchAntigravityQA, dispatchCodexReview, writeGepaRegister } from './llm-dispatcher.mjs';
 import { resolveGate } from './gate-manager.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const AGENT_CORE = join(__dirname, '..');
+
+/**
+ * Preprocess downloaded source files:
+ * 1. Extract .msg (Outlook email) attachments using extract_msg
+ * 2. Unzip .zip archives (recursively, including those found inside extracted .msg)
+ * This ensures all nested PDFs, text files, and spreadsheets are available for analysis.
+ */
+function preprocessSources(sourcesDir) {
+  if (!fs.existsSync(sourcesDir)) return;
+
+  /**
+   * Recursively find all files matching a predicate.
+   */
+  function findFiles(dir, predicate) {
+    const results = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...findFiles(fullPath, predicate));
+      } else if (predicate(entry.name)) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  // Extract .msg files (top-level only — msg within msg is rare)
+  const msgFiles = fs.readdirSync(sourcesDir).filter(f => f.toLowerCase().endsWith('.msg'));
+  for (const msgFile of msgFiles) {
+    const msgPath = path.join(sourcesDir, msgFile);
+    console.log(`Extracting MSG: ${msgFile}...`);
+    const r = spawnSync('extract_msg', ['--out', sourcesDir, msgPath], {
+      encoding: 'utf8',
+      timeout: 60_000,
+      cwd: sourcesDir
+    });
+    if (r.status !== 0) {
+      console.warn(`extract_msg failed for ${msgFile}: ${r.stderr || r.error?.message || 'unknown error'}`);
+    } else {
+      console.log(`  ✓ MSG extracted: ${msgFile}`);
+    }
+  }
+
+  // Recursively unzip .zip files (including those found inside MSG-extracted dirs)
+  const zipFiles = findFiles(sourcesDir, f => f.toLowerCase().endsWith('.zip'));
+  for (const zipPath of zipFiles) {
+    const zipDir = path.dirname(zipPath);
+    const unzipDir = path.join(zipDir, 'unzipped');
+    fs.mkdirSync(unzipDir, { recursive: true });
+    console.log(`Unzipping: ${path.relative(sourcesDir, zipPath)}...`);
+    const r = spawnSync('unzip', ['-o', '-d', unzipDir, zipPath], {
+      encoding: 'utf8',
+      timeout: 120_000,
+      cwd: zipDir
+    });
+    if (r.status !== 0) {
+      console.warn(`unzip failed for ${path.basename(zipPath)}: ${r.stderr || r.error?.message || 'unknown error'}`);
+    } else {
+      console.log(`  ✓ Unzipped: ${path.basename(zipPath)}`);
+    }
+  }
+
+  // Count total usable source files (recursive)
+  const usableFiles = findFiles(sourcesDir, f => /\.(txt|pdf|xlsx|csv)$/i.test(f));
+  console.log(`Preprocessing complete: ${usableFiles.length} usable source files found`);
+}
 const RUNS_DIR = join(AGENT_CORE, 'steel-bus/runs');
 
 function log(runDir, signal) {
@@ -58,6 +125,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
   doDownload = download,
   doAnalysis = dispatchGeminiAnalysis,
   doQA = dispatchAntigravityQA,
+  doCodexReview = dispatchCodexReview,
   doUpload = driveUpload,
   doPublish = defaultPublishRun,
   makeGateKb = defaultMakeGateKb,
@@ -65,6 +133,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
   gateTimeoutMs = 30 * 60 * 1000,
   runsDir = RUNS_DIR,
   maxCorrections = 3,
+  maxCodexCorrections = 1,
 } = {}) {
   const runDir = path.join(runsDir, runId);
   const sourcesDir = path.join(runDir, 'sources');
@@ -91,6 +160,11 @@ export async function runPipeline(runId, folderId, notifyFn, {
     const manifestPath = path.join(runsDir, runId, 'manifest-drive-download.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     await notifyFn(`✅ Download завершён (${manifest.items.length} файлов)`);
+
+    // Preprocess: extract .msg attachments, unzip .zip archives
+    await notifyFn('⏳ Предобработка источников (MSG/ZIP)...');
+    preprocessSources(sourcesDir);
+    await notifyFn('✅ Предобработка завершена');
 
     // Initial Gemini analysis
     await notifyFn('⏳ Gemini анализ запущен...');
@@ -161,9 +235,30 @@ export async function runPipeline(runId, folderId, notifyFn, {
       return;
     }
 
-    await notifyFn('⏳ CodexClaw финализация...');
-    // CodexClaw dispatch stub — real implementation in Sprint 14
-    await notifyFn('✅ CodexClaw финализация завершена');
+    await notifyFn('⏳ Codex ревью анализа...');
+    let codexResult = await doCodexReview(runId, runDir);
+
+    if (codexResult.verdict === 'NEEDS_FIXES') {
+      await notifyFn(`⚠️ Codex: дефекты найдены\n${esc(codexResult.notes)}`);
+      for (let cx = 0; cx < maxCodexCorrections; cx++) {
+        await notifyFn(`⏳ Claude коррекция по замечаниям Codex (${cx + 1}/${maxCodexCorrections})...`);
+        await doAnalysis(runId, runDir, sourcesDir);
+        codexResult = await doCodexReview(runId, runDir);
+        if (codexResult.verdict !== 'NEEDS_FIXES') break;
+      }
+    }
+
+    if (codexResult.verdict === 'NEEDS_FIXES') {
+      await notifyFn(`⚠️ Codex: замечания остались после коррекций\n${esc(codexResult.notes)}`);
+    } else {
+      await notifyFn('✅ Codex ревью: APPROVED');
+    }
+
+    if (codexResult.proposals && codexResult.proposals.length > 0) {
+      const registerPath = writeGepaRegister(runId, runDir, codexResult.proposals);
+      log(runDir, { schema: 'steel.gepa-register.v1', run_id: runId, proposals_count: codexResult.proposals.length });
+      await notifyFn(`📋 GEPA: ${codexResult.proposals.length} предложение(й) записано в gepa-register.json\nОжидает решения владельца.`);
+    }
 
     // G5 — Upload approval
     const g5 = await askGate(

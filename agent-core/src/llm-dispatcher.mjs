@@ -242,7 +242,7 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   }
 
   // Save analysis result AFTER generateWorkbooks so it includes version_string and generated_at
-  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  const analysisPath = path.join(runDir, 'analysis.json');
   fs.writeFileSync(analysisPath, JSON.stringify(analysis, null, 2), 'utf8');
 
   await generateDash(analysis, outputDir);
@@ -274,9 +274,9 @@ export async function dispatchOpenChatQuestion(runId, gateId, question, agent, {
 }
 
 export async function dispatchAntigravityQA(runId, runDir, { spawn = spawnSync } = {}) {
-  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  const analysisPath = path.join(runDir, 'analysis.json');
   if (!fs.existsSync(analysisPath)) {
-    return { verdict: 'BLOCKED', notes: 'gemini-analysis.json not found — nothing to verify' };
+    return { verdict: 'BLOCKED', notes: 'analysis.json not found — nothing to verify' };
   }
   const analysisJson = fs.readFileSync(analysisPath, 'utf8');
 
@@ -328,9 +328,9 @@ ${analysisJson}`;
 }
 
 export async function dispatchCodexReview(runId, runDir, { spawn = spawnSync } = {}) {
-  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  const analysisPath = path.join(runDir, 'analysis.json');
   if (!fs.existsSync(analysisPath)) {
-    return { verdict: 'NEEDS_FIXES', notes: 'gemini-analysis.json not found — nothing to review', proposals: [] };
+    return { verdict: 'NEEDS_FIXES', notes: 'analysis.json not found — nothing to review', proposals: [] };
   }
   const analysisJson = fs.readFileSync(analysisPath, 'utf8');
 
@@ -406,3 +406,5 @@ export function writeGepaRegister(runId, runDir, proposals) {
   fs.writeFileSync(registerPath, JSON.stringify(register, null, 2), 'utf8');
   return registerPath;
 }
+
+export { extractJsonFromText };

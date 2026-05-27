@@ -10,7 +10,7 @@ function defaultRepoRoot() {
 }
 
 function readPayload(runId, runDir) {
-  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  const analysisPath = path.join(runDir, 'analysis.json');
 
   if (!fs.existsSync(analysisPath)) {
     return {

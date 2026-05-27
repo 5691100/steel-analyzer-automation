@@ -23,7 +23,6 @@ telegram-bot.mjs (Drive-link intake, /run, /status, /cancel, Open-chat mode)
           - G1: AntigravityClaw/agy (Approve/Reject/Defer/Clarify/Open-chat)
           - G2: QA Review
           - G3: Correction Loop (up to 3 attempts)
-          - G4: CodexClaw Integration
           - G5: Final Upload Approval
   -> steel-drive.mjs upload (inside pipeline or via token)
   -> publish-run.mjs (writes dashboard/runs JSON, git pull/commit/push)
@@ -77,9 +76,9 @@ agent-core/
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
     telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
-    pipeline-runner.mjs               runPipeline(): 5-gate flow (AntigravityClaw/agy, QA, Correction, Codex, Upload); uploads .html alongside .xlsx (220 lines)
+    pipeline-runner.mjs               runPipeline(): G1:analysis, G2:QA, G3:correction ×3, Phase:self-checklist, Phase:dashboard, G5:upload; Codex/GEPA flow removed (292 lines)
     gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
-    llm-dispatcher.mjs                dispatchGeminiAnalysis(), dispatchOpenChatQuestion() (121 lines) — stale cleanup post-generation, narrow patterns
+    llm-dispatcher.mjs                dispatchGeminiAnalysis() -> analysis.json, dispatchAntigravityQA(), dispatchCodexReview(), writeGepaRegister(), dispatchOpenChatQuestion(); exports extractJsonFromText (410 lines)
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     template-config.mjs               Externalized template config: sheet names, column defs, category aliases (198 lines)
     dashboard-generator.mjs           generateDashboard() -> dashboard.html; uploaded to Drive with xlsx (206 lines)
@@ -87,6 +86,7 @@ agent-core/
       steel-analysis-prompt.mjs       buildAnalysisPrompt() for AntigravityClaw/agy, schema-aligned field names (150 lines)
     workbook-generator.mjs            JSON -> xlsx via ExcelJS: sheet sanitizer, Description sheets, versioning (604 lines)
     artifact-verifier.mjs             Output directory checker (60 lines)
+    self-checklist.mjs                runSelfChecklist(runDir): 7-point quality checks on analysis.json; writes self-checklist.json (schema: steel.self-checklist.v1); exports formatFailedItems (246 lines)
   steel-bus/
     lib/state-machine.mjs             Pure state machine, 17 states
     lib/gepa-register.mjs             GEPA proposal tracking
@@ -119,5 +119,5 @@ docs/
 
 `requested` -> `sources_manifested` -> `sources_downloaded` -> `extraction_done` -> `workbooks_generated` -> `workbooks_validated` -> `producer_handoff_done` -> `claude_review_requested` -> `claude_review_passed` | `claude_review_blocked` -> `codex_integration_requested` -> `codex_integration_done` -> `gepa_proposed` -> `gepa_reviewed` -> `upload_ready` -> `uploaded_verified` -> `closed` | `dead_letter`
 
-<!-- sprint:15 -->
-<!-- updated-by-superflow:2026-05-26 -->
+<!-- sprint:17 -->
+<!-- updated-by-superflow:2026-05-27 -->

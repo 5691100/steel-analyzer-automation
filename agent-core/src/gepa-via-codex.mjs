@@ -82,7 +82,7 @@ ${checklistJson}`;
   const proposals = Array.isArray(parsed.proposals)
     ? parsed.proposals.map(p => ({
         ...p,
-        raised_by: 'codex',
+        raised_by: result.provider,
         owner_decision: null,
         raised_at: new Date().toISOString()
       }))

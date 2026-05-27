@@ -35,8 +35,8 @@ const OAUTH_TOKEN_PATH = '/root/.config/codexclaw/secrets/google-oauth-user.json
 
 function loadEnv() {
   const envPaths = [
-    join(ROOT, 'GeminiClaw/.env'),
-    join(process.env.HOME || '/root', 'GeminiClaw/.env'),
+    join(ROOT, 'AntigravityClaw/.env'),
+    join(process.env.HOME || '/root', 'AntigravityClaw/.env'),
     join(ROOT, '.env')
   ];
   for (const envPath of envPaths) {
@@ -62,7 +62,7 @@ function getCredsPath(cmdArgs) {
   if (process.env.STEEL_DRIVE_CREDS) return process.env.STEEL_DRIVE_CREDS;
   if (process.env.GWS_AUTH_PATH) return process.env.GWS_AUTH_PATH;
 
-  const defaultPath = join(process.env.HOME || '/root', 'GeminiClaw/store/gws-auth.json');
+  const defaultPath = join(process.env.HOME || '/root', 'AntigravityClaw/store/gws-auth.json');
   if (fs.existsSync(defaultPath)) return defaultPath;
 
   return null;
@@ -201,11 +201,12 @@ async function list(drive, runId, folderId) {
   console.log(`Listing folder ${folderId} for run ${runId}...`);
   const res = await drive.files.list({
     q: `'${folderId}' in parents and trashed = false`,
-    fields: 'files(id, name, md5Checksum, size)',
+    fields: 'files(id, name, md5Checksum, size, mimeType)',
   });
   const files = res.data.files || [];
-  console.table(files.map(f => ({ name: f.name, id: f.id, md5: f.md5Checksum, size: f.size })));
-  return files;
+  const filtered = files.filter(f => !f.mimeType || !f.mimeType.startsWith('application/vnd.google-apps.'));
+  console.table(filtered.map(f => ({ name: f.name, id: f.id, md5: f.md5Checksum, size: f.size })));
+  return filtered;
 }
 
 export function mergeDownloadManifest(existing, next) {

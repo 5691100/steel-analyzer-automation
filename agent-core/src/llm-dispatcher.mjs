@@ -15,75 +15,193 @@ function parseProjectInfo(folderName) {
   return { project_no: 'Unknown', project_name: folderName };
 }
 
+/**
+ * Recursively collect all files matching a predicate from a directory tree.
+ */
+function findFilesRecursive(dir, predicate) {
+  const results = [];
+  if (!fs.existsSync(dir)) return results;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...findFilesRecursive(fullPath, predicate));
+    } else if (predicate(entry.name)) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/**
+ * Extract the outermost balanced JSON object from text that may contain
+ * chain-of-thought, markdown fences, or other non-JSON content.
+ * Returns the parsed object or throws.
+ */
+function extractJsonFromText(text) {
+  // Strategy 1: Try the whole text as JSON
+  try {
+    return JSON.parse(text);
+  } catch { /* continue */ }
+
+  // Strategy 2: Find the first { and match to the last corresponding }
+  const firstBrace = text.indexOf('{');
+  if (firstBrace === -1) throw new Error('No JSON object found in output');
+
+  // Find matching closing brace by counting depth
+  let depth = 0;
+  let lastClose = -1;
+  for (let i = firstBrace; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0) lastClose = i;
+    }
+  }
+
+  if (lastClose === -1) throw new Error('No balanced JSON object found in output');
+
+  const candidate = text.slice(firstBrace, lastClose + 1);
+  try {
+    return JSON.parse(candidate);
+  } catch { /* continue */ }
+
+  // Strategy 3: Try the LAST large JSON block (Gemini may output thinking, then JSON)
+  // Find all { positions and try from the last one
+  for (let start = text.lastIndexOf('{"schema"'); start >= 0; start = text.lastIndexOf('{"schema"', start - 1)) {
+    depth = 0;
+    for (let i = start; i < text.length; i++) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          try {
+            return JSON.parse(text.slice(start, i + 1));
+          } catch { break; }
+        }
+      }
+    }
+  }
+
+  // Strategy 4: Strip markdown code fences and try again
+  const fenced = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (fenced) {
+    try {
+      return JSON.parse(fenced[1]);
+    } catch { /* continue */ }
+  }
+
+  throw new Error(`Could not extract valid JSON from output (${text.length} chars)`);
+}
+
 export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
   spawn = spawnSync,
   generate = generateWorkbooks,
   generateDash = generateDashboard,
   verify = verifyRunOutput,
-  customComment = null
+  customComment = null,
+  maxRetries = 1
 } = {}) {
-  // Convert PDFs to text if .txt counterparts are missing
-  for (const file of fs.readdirSync(sourcesDir).filter(f => f.endsWith('.pdf'))) {
-    const txtPath = path.join(sourcesDir, file.replace(/\.pdf$/i, '.txt'));
+  // Recursively convert PDFs to text if .txt counterparts are missing
+  const allPdfs = findFilesRecursive(sourcesDir, f => f.toLowerCase().endsWith('.pdf'));
+  for (const pdfPath of allPdfs) {
+    const txtPath = pdfPath.replace(/\.pdf$/i, '.txt');
     if (!fs.existsSync(txtPath)) {
-      const r = spawnSync('pdftotext', [path.join(sourcesDir, file), txtPath], { encoding: 'utf8' });
-      if (r.status !== 0) console.warn(`pdftotext failed for ${file}: ${r.stderr}`);
+      const r = spawnSync('pdftotext', [pdfPath, txtPath], { encoding: 'utf8' });
+      if (r.status !== 0) console.warn(`pdftotext failed for ${pdfPath}: ${r.stderr}`);
     }
   }
 
   const MAX_SOURCE_CHARS = 80_000;
   const MAX_DRAWING_CHARS = 20_000;
   const DRAWING_PATTERN = /teräs(?:kokoonpanot|osakuvat)/i;
-  const files = fs.readdirSync(sourcesDir).filter(f => f.endsWith('.txt'));
+
+  // Recursively find all .txt files in sources and subdirectories
+  const allTxtPaths = findFilesRecursive(sourcesDir, f => f.endsWith('.txt'));
   const sourceTexts = {};
-  for (const file of files) {
-    let text = fs.readFileSync(path.join(sourcesDir, file), 'utf8');
-    const limit = DRAWING_PATTERN.test(file) ? MAX_DRAWING_CHARS : MAX_SOURCE_CHARS;
+  for (const txtPath of allTxtPaths) {
+    // Use relative path from sourcesDir as the key for clarity
+    const relName = path.relative(sourcesDir, txtPath);
+    let text = fs.readFileSync(txtPath, 'utf8');
+    const limit = DRAWING_PATTERN.test(relName) ? MAX_DRAWING_CHARS : MAX_SOURCE_CHARS;
     if (text.length > limit) {
-      console.warn(`Truncating ${file} (${text.length} chars → ${limit})`);
+      console.warn(`Truncating ${relName} (${text.length} chars → ${limit})`);
       text = text.slice(0, limit) + '\n[TRUNCATED]';
     }
-    sourceTexts[file] = text;
+    sourceTexts[relName] = text;
   }
+
+  if (Object.keys(sourceTexts).length === 0) {
+    throw new Error(`No .txt source files found in ${sourcesDir} or its subdirectories. Check that msg/zip extraction and PDF conversion completed.`);
+  }
+  console.log(`Found ${Object.keys(sourceTexts).length} source text files (recursive scan)`);
 
   let prompt = buildAnalysisPrompt(runId, sourceTexts);
   if (customComment) {
     prompt += `\n\n⚠️ Дополнительные указания заказчика по этому проекту:\n${customComment}\n`;
   }
 
-  const promptChars = prompt.length;
-  console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars)...`);
-  const dispatchStart = Date.now();
-  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '60m', '-p', '-'], {
-    input: prompt,
-    timeout: 4_200_000,
-    encoding: 'utf8',
-    cwd: '/tmp'
-  });
-  const elapsedSec = ((Date.now() - dispatchStart) / 1000).toFixed(1);
-  const stdoutBytes = (result.stdout ?? '').length;
-  const stderrBytes = (result.stderr ?? '').length;
-  console.log(`agy finished: status=${result.status ?? 'null'} elapsed=${elapsedSec}s stdout=${stdoutBytes}B stderr=${stderrBytes}B`);
-
-  // Always persist agy output for post-mortem analysis
-  const agyLogPath = path.join(runDir, 'agy-run.log');
-  const logHeader = `=== agy run ${runId} ===\nstart: ${new Date(dispatchStart).toISOString()}\nelapsed: ${elapsedSec}s\nstatus: ${result.status ?? 'null'}\nprompt_chars: ${promptChars}\nstdout_bytes: ${stdoutBytes}\nstderr_bytes: ${stderrBytes}\n\n--- STDOUT ---\n`;
-  const logFooter = stderrBytes > 0 ? `\n\n--- STDERR ---\n${result.stderr}` : '';
-  fs.writeFileSync(agyLogPath, logHeader + (result.stdout ?? '') + logFooter, 'utf8');
-
-  if (result.error) {
-    throw result.error;
+  // Check for previous QA feedback to perform corrections
+  const qaPath = path.join(runDir, 'qa-result.json');
+  if (fs.existsSync(qaPath)) {
+    try {
+      const qaResult = JSON.parse(fs.readFileSync(qaPath, 'utf8'));
+      if (qaResult.verdict === 'BLOCKED' && qaResult.notes) {
+        prompt += `\n\n⚠️ ВНИМАНИЕ: Предыдущий анализ был отклонен QA-рецензентом (ClaudeClaw) со следующими замечаниями:\n\n--- НАЧАЛО ЗАМЕЧАНИЙ ClaudeClaw ---\n${qaResult.notes}\n--- КОНЕЦ ЗАМЕЧАНИЙ ClaudeClaw ---\n\nПожалуйста, исправьте ВСЕ указанные дефекты в новом отчете.\n`;
+      }
+    } catch (err) {
+      console.warn(`Warning: Could not read previous QA result: ${err.message}`);
+    }
   }
 
-  const stdout = (result.stdout ?? '').trim();
+  const promptChars = prompt.length;
   let analysis;
+  let lastError;
 
-  try {
-    const jsonMatch = stdout.match(/\{[\s\S]*}/);
-    const jsonStr = jsonMatch ? jsonMatch[0] : stdout;
-    analysis = JSON.parse(jsonStr);
-  } catch (err) {
-    throw new Error(`Failed to parse Gemini JSON output. Raw output saved to ${agyLogPath}. Error: ${err.message}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      console.log(`Retry ${attempt}/${maxRetries} for Gemini analysis...`);
+    }
+
+    console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars, attempt ${attempt + 1})...`);
+    const dispatchStart = Date.now();
+    const result = spawn('claude', ['--dangerously-skip-permissions', '-p', '-'], {
+      input: prompt,
+      timeout: 4_200_000,
+      encoding: 'utf8',
+      cwd: '/tmp'
+    });
+    const elapsedSec = ((Date.now() - dispatchStart) / 1000).toFixed(1);
+    const stdoutBytes = (result.stdout ?? '').length;
+    const stderrBytes = (result.stderr ?? '').length;
+    console.log(`claude finished: status=${result.status ?? 'null'} elapsed=${elapsedSec}s stdout=${stdoutBytes}B stderr=${stderrBytes}B`);
+
+    // Always persist claude output for post-mortem analysis
+    const claudeLogPath = path.join(runDir, `claude-run${attempt > 0 ? `-retry${attempt}` : ''}.log`);
+    const logHeader = `=== claude run ${runId} (attempt ${attempt + 1}) ===\nstart: ${new Date(dispatchStart).toISOString()}\nelapsed: ${elapsedSec}s\nstatus: ${result.status ?? 'null'}\nprompt_chars: ${promptChars}\nstdout_bytes: ${stdoutBytes}\nstderr_bytes: ${stderrBytes}\n\n--- STDOUT ---\n`;
+    const logFooter = stderrBytes > 0 ? `\n\n--- STDERR ---\n${result.stderr}` : '';
+    fs.writeFileSync(claudeLogPath, logHeader + (result.stdout ?? '') + logFooter, 'utf8');
+
+    if (result.error) {
+      lastError = result.error;
+      continue;
+    }
+
+    const stdout = (result.stdout ?? '').trim();
+    try {
+      analysis = extractJsonFromText(stdout);
+      break; // Success
+    } catch (err) {
+      lastError = new Error(`Failed to parse Claude JSON output (attempt ${attempt + 1}). Raw output saved to ${claudeLogPath}. Error: ${err.message}`);
+      console.warn(lastError.message);
+      if (attempt < maxRetries) {
+        console.log(`Will retry in 10 seconds...`);
+        await new Promise(r => setTimeout(r, 10_000));
+      }
+    }
+  }
+
+  if (!analysis) {
+    throw lastError || new Error('Claude analysis failed: no valid JSON output after retries');
   }
 
   let folderName = 'Unknown';
@@ -138,14 +256,14 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
 }
 
 export async function dispatchOpenChatQuestion(runId, gateId, question, agent, { spawn = spawnSync } = {}) {
-  const CLI_MAP = { gemini: 'gemini', claude: 'claude', codex: 'codex', antigravity: 'agy' };
+  const CLI_MAP = { gemini: 'gemini', claude: 'claude', codex: 'codex', antigravity: 'claude' };
   const cli = CLI_MAP[agent] ?? 'gemini';
   const prompt = `Steel Analyzer run: ${runId}\nGate: ${gateId}\nOwner question: ${question}\n\nAnswer concisely in the same language as the question.`;
   let result;
   if (cli === 'codex') {
     result = spawn('codex', ['exec', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
   } else {
-    const args = cli === 'agy' ? ['--dangerously-skip-permissions', '-p', '-'] : ['-p', '-'];
+    const args = agent === 'antigravity' ? ['--dangerously-skip-permissions', '-p', '-'] : ['-p', '-'];
     result = spawn(cli, args, { input: prompt, timeout: 120_000, encoding: 'utf8' });
   }
   if (result.error || result.status !== 0) {
@@ -177,19 +295,19 @@ Return ONLY a JSON object with two fields:
 Analysis JSON:
 ${analysisJson}`;
 
-  const result = spawn('agy', ['--dangerously-skip-permissions', '--print-timeout', '10m', '-p', '-'], {
+  const result = spawn('claude', ['--dangerously-skip-permissions', '-p', '-'], {
     input: prompt,
     timeout: 900_000,
     encoding: 'utf8',
     cwd: '/tmp'
   });
 
-  const qaLogPath = path.join(runDir, 'agy-qa.log');
+  const qaLogPath = path.join(runDir, 'claude-qa.log');
   fs.writeFileSync(qaLogPath, `=== QA run ${runId} ===\nstatus: ${result.status}\n\n--- STDOUT ---\n${result.stdout ?? ''}\n--- STDERR ---\n${result.stderr ?? ''}`, 'utf8');
 
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';
-    return { verdict: 'BLOCKED', notes: `agy QA process failed: ${detail}` };
+    return { verdict: 'BLOCKED', notes: `claude QA process failed: ${detail}` };
   }
 
   const stdout = (result.stdout ?? '').trim();
@@ -207,4 +325,84 @@ ${analysisJson}`;
     fs.writeFileSync(path.join(runDir, 'qa-result.json'), JSON.stringify(fallback, null, 2), 'utf8');
     return fallback;
   }
+}
+
+export async function dispatchCodexReview(runId, runDir, { spawn = spawnSync } = {}) {
+  const analysisPath = path.join(runDir, 'gemini-analysis.json');
+  if (!fs.existsSync(analysisPath)) {
+    return { verdict: 'NEEDS_FIXES', notes: 'gemini-analysis.json not found — nothing to review', proposals: [] };
+  }
+  const analysisJson = fs.readFileSync(analysisPath, 'utf8');
+
+  const prompt = `You are a technical reviewer for a steel structure analysis pipeline (CodexClaw).
+Review the following JSON analysis output and:
+1. Check for critical errors: missing weights, wrong totals, invalid profile data
+2. Identify ambiguities where standard assumptions were made or deviations from standard exist
+
+Return ONLY a JSON object with three fields:
+- "verdict": "APPROVED" if no critical errors, "NEEDS_FIXES" if critical errors exist
+- "notes": brief summary of findings (one line, empty string if approved)
+- "proposals": array of GEPA proposals for ambiguities/deviations (can be empty). Each proposal:
+  {
+    "id": "GEPA-001" (sequential),
+    "description": "what needs owner decision",
+    "drawing_ref": "optional drawing reference",
+    "standard_assumption": "what standard says",
+    "proposed_deviation": "what was assumed instead"
+  }
+
+Analysis JSON:
+${analysisJson}`;
+
+  const result = spawn('codex', ['exec', '-'], {
+    input: prompt,
+    timeout: 300_000,
+    encoding: 'utf8'
+  });
+
+  const reviewLogPath = path.join(runDir, 'codex-review.log');
+  fs.writeFileSync(reviewLogPath, `=== Codex review ${runId} ===\nstatus: ${result.status}\n\n--- STDOUT ---\n${result.stdout ?? ''}\n--- STDERR ---\n${result.stderr ?? ''}`, 'utf8');
+
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';
+    return { verdict: 'NEEDS_FIXES', notes: `codex review process failed: ${detail}`, proposals: [] };
+  }
+
+  const stdout = (result.stdout ?? '').trim();
+  try {
+    const jsonMatch = stdout.match(/\{[\s\S]*}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : stdout);
+    const reviewResult = {
+      verdict: parsed.verdict === 'APPROVED' ? 'APPROVED' : 'NEEDS_FIXES',
+      notes: parsed.notes || '',
+      proposals: Array.isArray(parsed.proposals) ? parsed.proposals : []
+    };
+    fs.writeFileSync(path.join(runDir, 'codex-review.json'), JSON.stringify(reviewResult, null, 2), 'utf8');
+    return reviewResult;
+  } catch (err) {
+    const fallback = { verdict: 'NEEDS_FIXES', notes: `Failed to parse Codex review JSON: ${err.message}`, proposals: [] };
+    fs.writeFileSync(path.join(runDir, 'codex-review.json'), JSON.stringify(fallback, null, 2), 'utf8');
+    return fallback;
+  }
+}
+
+export function writeGepaRegister(runId, runDir, proposals) {
+  const register = {
+    schema: 'steel.gepa-register.v1',
+    run_id: runId,
+    proposals: proposals.map((p, i) => ({
+      id: p.id || `GEPA-${String(i + 1).padStart(3, '0')}`,
+      raised_by: 'codex',
+      description: p.description || '',
+      drawing_ref: p.drawing_ref,
+      standard_assumption: p.standard_assumption,
+      proposed_deviation: p.proposed_deviation,
+      owner_decision: 'pending',
+      raised_at: new Date().toISOString()
+    })),
+    updated_at: new Date().toISOString()
+  };
+  const registerPath = path.join(runDir, 'gepa-register.json');
+  fs.writeFileSync(registerPath, JSON.stringify(register, null, 2), 'utf8');
+  return registerPath;
 }

@@ -4,7 +4,7 @@
  * run-sequential-steel.mjs
  *
  * Batch sequential runner for Steel Analyzer pipeline.
- * Runs projects from a JSON queue with 2-hour fixed-interval scheduling.
+ * Runs projects from a JSON queue with 10-minute delay between runs.
  *
  * Usage:
  *   node run-sequential-steel.mjs <queue.json> [--interval-ms <ms>] [--dry-run]
@@ -16,7 +16,7 @@
  * ]
  *
  * All gates are auto-approved. No Telegram notifications.
- * QA verification uses local Antigravity (agy) only.
+ * QA verification uses Claude (ClaudeClaw) only.
  */
 
 import fs from 'fs';
@@ -33,7 +33,7 @@ const AGENT_CORE = resolve(__dirname, '..');
 const RUNS_DIR = join(AGENT_CORE, 'steel-bus/runs');
 const LOG_DIR = join(AGENT_CORE, 'logs');
 
-const DEFAULT_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const DEFAULT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -66,9 +66,11 @@ async function main() {
   const dryRun = args.includes('--dry-run');
   const intervalIdx = args.indexOf('--interval-ms');
   const intervalMs = intervalIdx >= 0 ? parseInt(args[intervalIdx + 1], 10) : DEFAULT_INTERVAL_MS;
+  const delayIdx = args.indexOf('--start-delay-ms');
+  const startDelayMs = delayIdx >= 0 ? parseInt(args[delayIdx + 1], 10) : 0;
 
   if (!queuePath) {
-    console.error('Usage: node run-sequential-steel.mjs <queue.json> [--interval-ms <ms>] [--dry-run]');
+    console.error('Usage: node run-sequential-steel.mjs <queue.json> [--interval-ms <ms>] [--start-delay-ms <ms>] [--dry-run]');
     process.exit(1);
   }
 
@@ -91,9 +93,17 @@ async function main() {
   logger.log(`=== Sequential Steel Analyzer ===`);
   logger.log(`Queue: ${queuePath} (${queue.length} projects)`);
   logger.log(`Interval: ${intervalMs / 60000} min`);
+  logger.log(`Start Delay: ${startDelayMs / 60000} min`);
   logger.log(`Dry run: ${dryRun}`);
   logger.log(`Log file: ${logPath}`);
   logger.log('');
+
+  if (startDelayMs > 0) {
+    logger.log(`⏱ Waiting ${(startDelayMs / 60000).toFixed(1)} min before starting the first project...`);
+    if (!dryRun) {
+      await sleep(startDelayMs);
+    }
+  }
 
   // Console-only notification function (suppresses Telegram)
   const notifyFn = async (text) => {
@@ -135,9 +145,103 @@ async function main() {
           return dispatchGeminiAnalysis(rid, rDir, srcDir, { customComment: comment || null });
         };
 
+        // Custom QA function that routes to ClaudeClaw and polls for the response
+        const doQA = async (rid, rDir) => {
+          let folderName = 'Unknown';
+          const manifestPath = path.join(rDir, 'manifest-drive-download.json');
+          if (fs.existsSync(manifestPath)) {
+            try {
+              const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+              folderName = manifest.drive_folder_name || manifest.folder_id || 'Unknown';
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          const runData = {
+            run_id: rid,
+            project_name: folderName,
+            delivery_mode: 'procurement-grade',
+            requested_by: 'operator',
+            state: 'claude_review_requested',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          const taskFile = `/root/ClaudeClaw/workspace/inbox/steel-review-${rid}.json`;
+          const signalOutput = join(AGENT_CORE, `steel-bus/inbox/review-complete/${rid}.json`);
+
+          const taskPayload = {
+            task: 'steel-review',
+            run_id: rid,
+            schema_path: '/root/agent-core/schemas/steel-review-result.schema.json',
+            signal_output: signalOutput,
+            run_data: runData,
+            created_at: new Date().toISOString(),
+          };
+
+          // Ensure folders exist
+          fs.mkdirSync(path.dirname(taskFile), { recursive: true });
+          fs.mkdirSync(path.dirname(signalOutput), { recursive: true });
+
+          // Atomic write
+          const tempTaskFile = `${taskFile}.tmp`;
+          fs.writeFileSync(tempTaskFile, JSON.stringify(taskPayload, null, 2), 'utf8');
+          fs.renameSync(tempTaskFile, taskFile);
+
+          logger.log(`[ClaudeClaw Review] Written task payload to ${taskFile}`);
+
+          // Polling loop
+          const maxWaitMs = 120 * 60 * 1000; // 2 hours timeout
+          const pollIntervalMs = 5000; // 5 seconds
+          const startTimePoll = Date.now();
+
+          logger.log(`[ClaudeClaw Review] Polling for review result at ${signalOutput}...`);
+
+          while (Date.now() - startTimePoll < maxWaitMs) {
+            if (fs.existsSync(signalOutput)) {
+              try {
+                const signalContent = fs.readFileSync(signalOutput, 'utf8');
+                const signal = JSON.parse(signalContent);
+
+                if (signal.verdict) {
+                  logger.log(`[ClaudeClaw Review] Verdict received: ${signal.verdict}`);
+                  const mappedVerdict = (signal.verdict === 'PASS' || signal.verdict === 'ACCEPTED' || signal.verdict === 'APPROVE') ? 'ACCEPTED' : 'BLOCKED';
+                  
+                  let notes = 'Claude QA Review completed.';
+                  if (signal.issues && signal.issues.length > 0) {
+                    notes += '\nIssues found:\n' + signal.issues.map(i => `[${i.stage}] ${i.description} (${i.evidence || ''})`).join('\n');
+                  }
+
+                  // Save qa-result.json to runs folder
+                  const qaResult = {
+                    verdict: mappedVerdict,
+                    notes: notes
+                  };
+                  fs.writeFileSync(path.join(rDir, 'qa-result.json'), JSON.stringify(qaResult, null, 2), 'utf8');
+
+                  // Clean up the signal file so subsequent runs are clean
+                  try {
+                    fs.unlinkSync(signalOutput);
+                  } catch (e) {
+                    // ignore
+                  }
+
+                  return qaResult;
+                }
+              } catch (err) {
+                logger.log(`[ClaudeClaw Review] Error reading/parsing signal: ${err.message}`);
+              }
+            }
+            await sleep(pollIntervalMs);
+          }
+
+          throw new Error(`ClaudeClaw review timed out after ${maxWaitMs / 60000} minutes`);
+        };
+
         await runPipeline(runId, folderId, notifyFn, {
           doAnalysis,
-          doQA: dispatchAntigravityQA,
+          doQA,
           waitForGate,
           makeGateKb,
           runsDir: RUNS_DIR,
@@ -153,16 +257,10 @@ async function main() {
       }
     }
 
-    // Wait for fixed interval (from start of current run)
+    // Wait for fixed delay (from completion of current run)
     if (i < queue.length - 1) {
-      const elapsed = Date.now() - startTime;
-      const delay = Math.max(0, intervalMs - elapsed);
-      if (delay > 0) {
-        logger.log(`⏱ Waiting ${(delay / 60000).toFixed(1)} min before next project...`);
-        await sleep(delay);
-      } else {
-        logger.log(`⏱ Run exceeded interval, starting next immediately`);
-      }
+      logger.log(`⏱ Waiting ${(intervalMs / 60000).toFixed(1)} min before next project...`);
+      await sleep(intervalMs);
     }
   }
 

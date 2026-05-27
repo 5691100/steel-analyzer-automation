@@ -54,7 +54,9 @@ describe('Pipeline Runner', () => {
     const { runsDir } = setupRun(tempDir, runId, 3, true);
 
     await runPipeline(runId, folderId, notifyFn, {
-      getDrive, doDownload, doAnalysis, doQA, doUpload, doPublish, waitForGate, makeGateKb, runsDir,
+      getDrive, doDownload, doAnalysis, doQA,
+      doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
+      doUpload, doPublish, waitForGate, makeGateKb, runsDir,
     });
 
     assert.ok(notifications.length >= 4, `Expected ≥4 notifications, got ${notifications.length}`);
@@ -88,7 +90,9 @@ describe('Pipeline Runner', () => {
 
     await assert.rejects(
       runPipeline(runId, folderId, notifyFn, {
-        getDrive, doDownload, doAnalysis, doQA, waitForGate, makeGateKb, runsDir, maxCorrections: 0,
+        getDrive, doDownload, doAnalysis, doQA,
+        doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
+        waitForGate, makeGateKb, runsDir, maxCorrections: 0,
       }),
       { message: /QA blocked/ }
     );
@@ -114,6 +118,7 @@ describe('Pipeline Runner', () => {
       doDownload: async () => { setupRun(tempDir, runId, 3, true); },
       doAnalysis: async () => ({ ok: true }),
       doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
       doPublish: async () => ({ ok: true }),
       waitForGate,

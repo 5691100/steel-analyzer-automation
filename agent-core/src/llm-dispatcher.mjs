@@ -5,6 +5,7 @@ import { buildAnalysisPrompt } from './prompts/steel-analysis-prompt.mjs';
 import { generateWorkbooks } from './workbook-generator.mjs';
 import { verifyRunOutput } from './artifact-verifier.mjs';
 import { generateDashboard } from './dashboard-generator.mjs';
+import { callCodex } from './codex-runner.mjs';
 
 function parseProjectInfo(folderName) {
   if (!folderName) return { project_no: 'Unknown', project_name: 'Unknown' };
@@ -327,7 +328,7 @@ ${analysisJson}`;
   }
 }
 
-export async function dispatchCodexReview(runId, runDir, { spawn = spawnSync } = {}) {
+export async function dispatchCodexReview(runId, runDir, { spawn, callCodexFn = callCodex } = {}) {
   const analysisPath = path.join(runDir, 'analysis.json');
   if (!fs.existsSync(analysisPath)) {
     return { verdict: 'NEEDS_FIXES', notes: 'analysis.json not found — nothing to review', proposals: [] };
@@ -354,16 +355,20 @@ Return ONLY a JSON object with three fields:
 Analysis JSON:
 ${analysisJson}`;
 
-  const result = spawn('codex', ['exec', '-'], {
-    input: prompt,
-    timeout: 300_000,
-    encoding: 'utf8'
-  });
+  // If a legacy spawn mock is provided, wrap it into callCodexFn for backwards compatibility
+  const codexFn = spawn
+    ? async (p, opts) => {
+        const r = spawn('codex', ['exec', '-'], { input: p, timeout: opts?.timeout ?? 300_000, encoding: 'utf8' });
+        return { stdout: r.stdout ?? '', stderr: r.stderr ?? '', provider: 'codex', exitCode: r.status, error: r.error };
+      }
+    : callCodexFn;
+
+  const result = await codexFn(prompt, { timeout: 300_000 });
 
   const reviewLogPath = path.join(runDir, 'codex-review.log');
-  fs.writeFileSync(reviewLogPath, `=== Codex review ${runId} ===\nstatus: ${result.status}\n\n--- STDOUT ---\n${result.stdout ?? ''}\n--- STDERR ---\n${result.stderr ?? ''}`, 'utf8');
+  fs.writeFileSync(reviewLogPath, `=== Codex review ${runId} ===\nstatus: ${result.exitCode}\n\n--- STDOUT ---\n${result.stdout ?? ''}\n--- STDERR ---\n${result.stderr ?? ''}`, 'utf8');
 
-  if (result.error || result.status !== 0) {
+  if (result.error || result.exitCode !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';
     return { verdict: 'NEEDS_FIXES', notes: `codex review process failed: ${detail}`, proposals: [] };
   }

@@ -151,7 +151,7 @@ describe('Workbook Generator', () => {
 
     const categorySheet = bom.getWorksheet('BoM by Category');
     const categoryRows = categorySheet.getRows(4, 20)
-      .filter(row => row.getCell(1).value);
+      .filter(row => row.getCell(1).value && row.getCell(1).value !== 'Total');
     assert.strictEqual(categoryRows.length, 2);
   });
 

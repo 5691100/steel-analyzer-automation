@@ -189,7 +189,7 @@ describe('Sprint 14 Template Decisions', () => {
     const bomTotalRow = bomProfileSheet.getRows(4, 10).find(row => row.getCell(1).value === 'Total');
     assert.deepStrictEqual(bomTotalRow.getCell(6).value, { formula: `G${bomTotalRow.number}/D${bomTotalRow.number}` });
     const bomCategoryRows = bom.getWorksheet('BoM by Category').getRows(4, 20)
-      .filter(row => row.getCell(1).value);
+      .filter(row => row.getCell(1).value && row.getCell(1).value !== 'Total');
     assert.ok(bomCategoryRows.length > 0, 'BoM by Category should include data rows');
     assert.deepStrictEqual(
       bomCategoryRows.map(row => row.getCell(1).value),
@@ -209,7 +209,8 @@ describe('Sprint 14 Template Decisions', () => {
       'Project Summary',
       'ScopeClassification',
       'Exclusions',
-      'CoatingFire Evidence',
+      'Coating Summary',
+      'Coating Detail',
       'Transport Detail',
       'Open Questions',
       'Sources'

@@ -17,10 +17,32 @@ export const DESCRIPTION_SHEETS = [
   'Project Summary',
   'Scope / Classification',
   'Exclusions',
-  'Coating / Fire Evidence',
+  'Coating Summary',
+  'Coating Detail',
   'Transport Detail',
   'Open Questions',
   'Sources'
+];
+
+export const COATING_SUMMARY_COLUMNS = [
+  'Subproject',
+  'Coating Class',
+  'Fire Class',
+  'Total Weight (t)',
+  'Total Paint Area (m2)'
+];
+
+export const COATING_DETAIL_COLUMNS = [
+  'Subproject',
+  'Profile',
+  'Category',
+  'Steel Grade',
+  'Coating Class',
+  'Fire Class',
+  'Critical Temp (°C)',
+  'Am/V',
+  'Paint Area (m2)',
+  'Source'
 ];
 
 export const BOM_COLUMNS = [

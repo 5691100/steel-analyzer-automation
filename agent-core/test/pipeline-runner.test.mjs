@@ -55,7 +55,7 @@ describe('Pipeline Runner', () => {
 
     await runPipeline(runId, folderId, notifyFn, {
       getDrive, doDownload, doAnalysis, doQA,
-      doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
       doUpload, doPublish, waitForGate, makeGateKb, runsDir,
     });
 
@@ -91,7 +91,6 @@ describe('Pipeline Runner', () => {
     await assert.rejects(
       runPipeline(runId, folderId, notifyFn, {
         getDrive, doDownload, doAnalysis, doQA,
-        doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
         waitForGate, makeGateKb, runsDir, maxCorrections: 0,
       }),
       { message: /QA blocked/ }
@@ -101,7 +100,7 @@ describe('Pipeline Runner', () => {
 
   // ── New gate tests ─────────────────────────────────────────────────────────
 
-  it('pipeline calls waitForGate for each of 5 gates in order when approved', async () => {
+  it('pipeline calls waitForGate for each of 4 gates in order when approved (no g4_codex)', async () => {
     const gatesCalled = [];
     const waitForGate = async (runId, gateId) => {
       gatesCalled.push(gateId);
@@ -118,16 +117,121 @@ describe('Pipeline Runner', () => {
       doDownload: async () => { setupRun(tempDir, runId, 3, true); },
       doAnalysis: async () => ({ ok: true }),
       doQA: async () => ({ verdict: 'ACCEPTED' }),
-      doCodexReview: async () => ({ verdict: 'APPROVED', notes: '', proposals: [] }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
-      doPublish: async () => ({ ok: true }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gate-order-run.json' }),
       waitForGate,
       makeGateKb,
       runsDir,
     });
 
-    assert.deepEqual(gatesCalled, ['g1_gemini', 'g2_qa', 'g4_codex', 'g5_upload'],
-      `Expected gates in order, got: ${gatesCalled}`);
+    assert.deepEqual(gatesCalled, ['g1_gemini', 'g2_qa', 'g5_upload'],
+      `Expected gates in order [g1_gemini, g2_qa, g5_upload], got: ${gatesCalled}`);
+  });
+
+  it('pipeline blocks and returns BLOCKED verdict when self-checklist fails', async () => {
+    const runId = 'checklist-fail-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    const result = await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({
+        passed: false,
+        items: [{ id: 'xlsx-exists', verdict: 'fail', detail: 'No .xlsx files in output/', description: '' }],
+      }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/checklist-fail-run.json' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(result, 'Expected a return value when self-checklist fails');
+    assert.strictEqual(result.verdict, 'BLOCKED');
+    assert.strictEqual(result.reason, 'self-checklist-failed');
+    assert.ok(result.checklist, 'Expected checklist in result');
+    assert.ok(notifications.some(n => n.includes('Self-checklist FAIL')),
+      `Expected "Self-checklist FAIL" notification, got: ${notifications}`);
+  });
+
+  it('pipeline calls doSelfChecklist and doPublish after QA ACCEPTED', async () => {
+    const runId = 'checklist-publish-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    let selfChecklistCalled = false;
+    let publishCalled = false;
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => { selfChecklistCalled = true; return { passed: true, items: [] }; },
+      doPublish: async () => { publishCalled = true; return { ok: true, publishedPath: '/dashboard/runs/checklist-publish-run.json' }; },
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(selfChecklistCalled, 'doSelfChecklist should have been called');
+    assert.ok(publishCalled, 'doPublish should have been called for dashboard phase');
+    assert.ok(notifications.some(n => n.includes('Self-checklist passed')),
+      `Expected "Self-checklist passed" notification`);
+    assert.ok(notifications.some(n => n.includes('Dashboard')),
+      `Expected "Dashboard" notification`);
+  });
+
+  it('doSelfChecklist is called with only runDir (not runId)', async () => {
+    const runId = 'sig-check-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const capturedArgs = [];
+
+    await runPipeline(runId, 'folder', async () => {}, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async (...args) => { capturedArgs.push(...args); return { passed: true, items: [] }; },
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/sig-check-run.json' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.strictEqual(capturedArgs.length, 1,
+      `doSelfChecklist should be called with exactly 1 argument, got ${capturedArgs.length}: ${JSON.stringify(capturedArgs)}`);
+    assert.ok(capturedArgs[0].includes(runId) || capturedArgs[0].endsWith(runId),
+      `first arg should be runDir containing runId, got: ${capturedArgs[0]}`);
+  });
+
+  it('doCodexReview is NOT called in the pipeline', async () => {
+    const runId = 'no-codex-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    let codexCalled = false;
+
+    await runPipeline(runId, 'folder', async () => {}, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/no-codex-run.json' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      doCodexReview: async () => { codexCalled = true; return { verdict: 'APPROVED', notes: '', proposals: [] }; },
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.strictEqual(codexCalled, false, 'doCodexReview should not be called in the new pipeline');
   });
 
   it('pipeline stops at G1 when rejected', async () => {

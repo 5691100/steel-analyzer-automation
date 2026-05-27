@@ -31,7 +31,7 @@ describe('publishRun', () => {
       totals: { weight_kg: 123.4, paint_m2: 56.7, ignored: true },
       subproject_count: 2,
     };
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify(payload));
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), JSON.stringify(payload));
 
     const result = await publishRun('run-1', runDir, repoRoot, { dryRun: true });
 
@@ -107,7 +107,7 @@ describe('publishRun', () => {
     assert.equal(index[0].project_name, 'Updated Project');
   });
 
-  it('writes a failed stub when gemini-analysis.json is missing', async () => {
+  it('writes a failed stub when analysis.json is missing', async () => {
     await publishRun('missing-analysis', runDir, repoRoot, { dryRun: true });
 
     const payload = JSON.parse(fs.readFileSync(path.join(repoRoot, 'dashboard/runs/missing-analysis.json'), 'utf8'));
@@ -282,6 +282,6 @@ describe('publishRun', () => {
   });
 
   function writeAnalysis(payload) {
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify(payload));
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), JSON.stringify(payload));
   }
 });

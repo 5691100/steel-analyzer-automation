@@ -24,10 +24,11 @@ Test files: `agent-core/test/*.test.mjs`
 | `agent-core/scripts/steel-drive.mjs` (799 lines) | Google Drive list/download/upload with MD5 verification and atomic manifests. Uses User OAuth only — no Service Account fallback. |
 | `agent-core/scripts/steel-orchestrator.mjs` (843 lines) | File-bus watcher. Watches `steel-bus/inbox/`, drives state transitions, calls steel-drive and external CLIs. |
 | `agent-core/src/telegram-bot.mjs` (320 lines) | grammy Telegram bot. Drive-link intake (paste URL → auto run_id), 5-gate approval flow (G1-G5) with Approve/Reject/Defer/Clarify/Open-chat buttons, Open-chat Q&A mode, improved /status with ledger state. Security: `TELEGRAM_CHAT_ID` gate. |
-| `agent-core/src/pipeline-runner.mjs` | `runPipeline(runId, folderId, notifyFn)` — 5-gate pipeline: G1:Claude analysis, G2:Claude QA, G3:correction loop ×3, G4:Codex review + Claude fix loop + GEPA write, G5:upload. |
+| `agent-core/src/pipeline-runner.mjs` | `runPipeline(runId, folderId, notifyFn)` — pipeline: G1:Claude analysis, G2:Claude QA, G3:correction loop ×3, Phase:self-checklist (7 checks → `self-checklist.json`), Phase:dashboard publish, G5:upload. Codex/GEPA flow removed in Sprint 17. |
+| `agent-core/src/self-checklist.mjs` (246 lines) | `runSelfChecklist(runDir)` — 7-point quality checklist. Reads `analysis.json`, writes `self-checklist.json` (schema: `steel.self-checklist.v1`). Pipeline blocks on failure (`verdict: 'BLOCKED'`). Exports `runSelfChecklist`, `formatFailedItems`. |
 | `agent-core/src/gate-manager.mjs` (62 lines) | Pending gate registry (pendingGates Map), InlineKeyboard factory, resolveGate, GATE_AGENT/GATE_PROMPTS/GATE_HELP constants. |
 | `agent-core/src/publish-run.mjs` (161 lines) | `publishRun(runId, runDir, repoRoot, options)` — writes `dashboard/runs/<run_id>.json`, updates `dashboard/runs/index.json`, then runs `git pull --rebase` (with Basic auth if `GITHUB_TOKEN` set), `git add dashboard/runs/`, `git commit`, and `git push` unless `dryRun` is set. On failure: step-aware rollback (`reset HEAD~1` for push, `reset HEAD --` for commit) + `git clean` scoped to the two written files. |
-| `agent-core/src/llm-dispatcher.mjs` | `dispatchGeminiAnalysis` — calls `claude --dangerously-skip-permissions -p -` (ClaudeClaw) via stdin, parses JSON, generates workbooks. `dispatchAntigravityQA` — Claude QA self-check. `dispatchCodexReview` — calls `codex exec -` for G4 technical review, writes `codex-review.json`. `writeGepaRegister` — writes `gepa-register.json` (schema: `steel.gepa-register.v1`). Also `dispatchOpenChatQuestion`. |
+| `agent-core/src/llm-dispatcher.mjs` (410 lines) | `dispatchGeminiAnalysis` — calls `claude --dangerously-skip-permissions -p -` (ClaudeClaw) via stdin, parses JSON, generates workbooks, writes `analysis.json`. `dispatchAntigravityQA` — Claude QA self-check (reads `analysis.json`). `dispatchCodexReview` — writes `codex-review.json`. `writeGepaRegister` — writes `gepa-register.json`. `dispatchOpenChatQuestion`. Exports `extractJsonFromText` (Sprint 17). |
 | `agent-core/src/prompts/steel-analysis-prompt.mjs` (150 lines) | `buildAnalysisPrompt(runId, sourceTexts)` — builds the structured Gemini prompt from source `.txt` files. Aligned to unified schema field names (`file_name`, `source_type` in `sources_detail`). |
 | `agent-core/src/template-config.mjs` (198 lines) | Externalized template configuration: sheet names, column definitions, category aliases, description sheet structure. Single source of truth for workbook layout. |
 | `agent-core/src/dashboard-generator.mjs` (206 lines) | `generateDashboard(data, outputPath)` — generates `dashboard.html` in `runDir/output/`. Uploaded to Drive alongside xlsx files. HTML-escaped throughout. Null-guarded for missing `totals`. |
@@ -87,5 +88,5 @@ dispatches to Codex/AntigravityClaw/Claude via spawnSync (stdin), writes results
 - Operations: `docs/operations/`
 
 <!-- superflow:onboarded -->
-<!-- sprint:15 -->
-<!-- updated-by-superflow:2026-05-26 -->
+<!-- sprint:17 -->
+<!-- updated-by-superflow:2026-05-27 -->

@@ -133,7 +133,7 @@ describe('dispatchAntigravityQA', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify({ project_name: 'Test', subprojects: [] }), 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), JSON.stringify({ project_name: 'Test', subprojects: [] }), 'utf8');
 
     const result = await dispatchAntigravityQA('run-qa-1', runDir, {
       spawn: () => ({
@@ -155,7 +155,7 @@ describe('dispatchAntigravityQA', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), '{}', 'utf8');
 
     const result = await dispatchAntigravityQA('run-qa-2', runDir, {
       spawn: () => ({
@@ -171,7 +171,7 @@ describe('dispatchAntigravityQA', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('returns BLOCKED when gemini-analysis.json does not exist', async () => {
+  it('returns BLOCKED when analysis.json does not exist', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
@@ -186,7 +186,7 @@ describe('dispatchAntigravityQA', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), '{}', 'utf8');
 
     const result = await dispatchAntigravityQA('run-qa-4', runDir, {
       spawn: () => ({ stdout: '', stderr: 'crash', status: 1, error: null })
@@ -203,7 +203,7 @@ describe('dispatchCodexReview', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-review-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify({ project_name: 'Test', subprojects: [] }), 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), JSON.stringify({ project_name: 'Test', subprojects: [] }), 'utf8');
 
     const result = await dispatchCodexReview('run-cr-1', runDir, {
       spawn: () => ({
@@ -225,7 +225,7 @@ describe('dispatchCodexReview', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-review-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), '{}', 'utf8');
 
     const result = await dispatchCodexReview('run-cr-2', runDir, {
       spawn: () => ({
@@ -246,7 +246,7 @@ describe('dispatchCodexReview', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('returns NEEDS_FIXES when gemini-analysis.json does not exist', async () => {
+  it('returns NEEDS_FIXES when analysis.json does not exist', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-review-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
@@ -261,7 +261,7 @@ describe('dispatchCodexReview', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-review-test-'));
     const runDir = path.join(tempDir, 'run');
     fs.mkdirSync(runDir, { recursive: true });
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), '{}', 'utf8');
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), '{}', 'utf8');
 
     const result = await dispatchCodexReview('run-cr-4', runDir, {
       spawn: () => ({ stdout: '', stderr: 'crash', status: 1, error: null })

@@ -6,7 +6,8 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
-import { dispatchGeminiAnalysis, dispatchAntigravityQA, dispatchCodexReview, writeGepaRegister } from './llm-dispatcher.mjs';
+import { dispatchGeminiAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
+import { runSelfChecklist, formatFailedItems } from './self-checklist.mjs';
 import { resolveGate } from './gate-manager.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 
@@ -125,7 +126,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
   doDownload = download,
   doAnalysis = dispatchGeminiAnalysis,
   doQA = dispatchAntigravityQA,
-  doCodexReview = dispatchCodexReview,
+  doSelfChecklist = runSelfChecklist,
   doUpload = driveUpload,
   doPublish = defaultPublishRun,
   makeGateKb = defaultMakeGateKb,
@@ -133,7 +134,6 @@ export async function runPipeline(runId, folderId, notifyFn, {
   gateTimeoutMs = 30 * 60 * 1000,
   runsDir = RUNS_DIR,
   maxCorrections = 3,
-  maxCodexCorrections = 1,
 } = {}) {
   const runDir = path.join(runsDir, runId);
   const sourcesDir = path.join(runDir, 'sources');
@@ -223,47 +223,28 @@ export async function runPipeline(runId, folderId, notifyFn, {
 
     await notifyFn('✅ QA: ACCEPTED');
 
-    // G4 — CodexClaw finalization approval
-    const g4 = await askGate(
-      runId, 'g4_codex',
-      `✅ Run: <code>${runId}</code>\nQA passed.\n\nЗапустить CodexClaw финализацию?`,
-      notifyFn, makeGateKb, waitForGate, gateTimeoutMs
-    );
-    if (g4 !== 'approve') {
-      await notifyFn(`⛔ CodexClaw финализация отменена для run <code>${runId}</code>.`);
-      log(runDir, { schema: 'steel.run-cancelled.v1', run_id: runId, reason: 'G4 rejected' });
-      return;
+    // Phase: self-checklist
+    const checklist = await doSelfChecklist(runDir);
+    log(runDir, { schema: 'steel.self-checklist.v1', passed: checklist.passed });
+    if (!checklist.passed) {
+      await notifyFn(`❌ Self-checklist FAIL:\n${formatFailedItems(checklist.items)}`);
+      return { verdict: 'BLOCKED', reason: 'self-checklist-failed', checklist };
     }
+    await notifyFn(`✅ Self-checklist passed`);
 
-    await notifyFn('⏳ Codex ревью анализа...');
-    let codexResult = await doCodexReview(runId, runDir);
-
-    if (codexResult.verdict === 'NEEDS_FIXES') {
-      await notifyFn(`⚠️ Codex: дефекты найдены\n${esc(codexResult.notes)}`);
-      for (let cx = 0; cx < maxCodexCorrections; cx++) {
-        await notifyFn(`⏳ Claude коррекция по замечаниям Codex (${cx + 1}/${maxCodexCorrections})...`);
-        await doAnalysis(runId, runDir, sourcesDir);
-        codexResult = await doCodexReview(runId, runDir);
-        if (codexResult.verdict !== 'NEEDS_FIXES') break;
-      }
-    }
-
-    if (codexResult.verdict === 'NEEDS_FIXES') {
-      await notifyFn(`⚠️ Codex: замечания остались после коррекций\n${esc(codexResult.notes)}`);
-    } else {
-      await notifyFn('✅ Codex ревью: APPROVED');
-    }
-
-    if (codexResult.proposals && codexResult.proposals.length > 0) {
-      const registerPath = writeGepaRegister(runId, runDir, codexResult.proposals);
-      log(runDir, { schema: 'steel.gepa-register.v1', run_id: runId, proposals_count: codexResult.proposals.length });
-      await notifyFn(`📋 GEPA: ${codexResult.proposals.length} предложение(й) записано в gepa-register.json\nОжидает решения владельца.`);
-    }
+    // Phase: dashboard
+    const repoRoot = path.resolve(runDir, '../../..');
+    const dashResult = await doPublish(runId, runDir, repoRoot, {});
+    const dashboardUrl = process.env.VERCEL_PROJECT_URL
+      ? `https://${process.env.VERCEL_PROJECT_URL}/runs/${runId}`
+      : dashResult.publishedPath;
+    log(runDir, { schema: 'steel.dashboard.v1', publishedPath: dashResult.publishedPath });
+    await notifyFn(`📊 Dashboard: ${dashboardUrl}`);
 
     // G5 — Upload approval
     const g5 = await askGate(
       runId, 'g5_upload',
-      `📤 Run: <code>${runId}</code>\nCodexClaw готов.\n\nЗагрузить результаты в Drive?`,
+      `📤 Run: <code>${runId}</code>\nSelf-checklist passed.\n\nЗагрузить результаты в Drive?`,
       notifyFn, makeGateKb, waitForGate, gateTimeoutMs
     );
     if (g5 !== 'approve') {

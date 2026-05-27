@@ -55,7 +55,7 @@ describe('Telegram Bot Logic', () => {
   }
 
   function writeAnalysis(runDir, runId) {
-    fs.writeFileSync(path.join(runDir, 'gemini-analysis.json'), JSON.stringify({
+    fs.writeFileSync(path.join(runDir, 'analysis.json'), JSON.stringify({
       run_id: runId,
       project_name: 'Existing Analysis',
       status: 'complete',

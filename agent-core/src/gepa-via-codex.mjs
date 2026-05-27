@@ -79,21 +79,25 @@ ${checklistJson}`;
     return { verdict: 'WARN', reason: 'parse-error' };
   }
 
+  const now = new Date().toISOString();
   const proposals = Array.isArray(parsed.proposals)
     ? parsed.proposals.map(p => ({
-        ...p,
+        id: p.id,
         raised_by: result.provider,
-        owner_decision: null,
-        raised_at: new Date().toISOString()
+        description: p.description,
+        ...(p.drawing_ref != null ? { drawing_ref: p.drawing_ref } : {}),
+        ...(p.standard_assumption != null ? { standard_assumption: p.standard_assumption } : {}),
+        ...(p.proposed_deviation != null ? { proposed_deviation: p.proposed_deviation } : {}),
+        owner_decision: 'pending',
+        raised_at: now
       }))
     : [];
 
   const register = {
     schema: 'steel.gepa-register.v1',
     run_id: runId,
-    verdict: 'OK',
     proposals,
-    updated_at: new Date().toISOString()
+    updated_at: now
   };
 
   const gepaPath = path.join(runDir, 'gepa-register.json');

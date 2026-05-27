@@ -22,26 +22,38 @@ test('falls back to claude when codex ENOENT', async () => {
   assert.equal(result.stdout, 'claude-result');
 });
 
-test('falls back to claude when codex times out (status null)', async () => {
+test('falls back to claude when codex times out (status null + ETIMEDOUT)', async () => {
   let callCount = 0;
   const mockSpawn = () => {
     callCount++;
-    if (callCount === 1) return { status: null, stdout: '', stderr: '', error: null };
+    if (callCount === 1) return { status: null, stdout: '', stderr: '', error: { code: 'ETIMEDOUT' } };
     return { status: 0, stdout: 'claude-fallback', stderr: '', error: null };
   };
   const result = await callCodex('prompt', { deps: { spawnSync: mockSpawn } });
   assert.equal(result.provider, 'claude');
 });
 
-test('falls back to claude when stderr contains "command not found"', async () => {
+test('does NOT fall back when status null without ETIMEDOUT (generic kill)', async () => {
   let callCount = 0;
   const mockSpawn = () => {
     callCount++;
-    if (callCount === 1) return { status: 1, stdout: '', stderr: 'codex: command not found', error: null };
-    return { status: 0, stdout: 'claude-result', stderr: '', error: null };
+    return { status: null, stdout: '', stderr: '', error: null };
   };
   const result = await callCodex('prompt', { deps: { spawnSync: mockSpawn } });
-  assert.equal(result.provider, 'claude');
+  assert.equal(result.provider, 'codex');
+  assert.equal(callCount, 1);
+});
+
+test('does NOT fall back when stderr contains "command not found" (real Codex error)', async () => {
+  let callCount = 0;
+  const mockSpawn = () => {
+    callCount++;
+    return { status: 1, stdout: '', stderr: 'codex: command not found', error: null };
+  };
+  const result = await callCodex('prompt', { deps: { spawnSync: mockSpawn } });
+  assert.equal(result.provider, 'codex');
+  assert.equal(result.exitCode, 1);
+  assert.equal(callCount, 1);
 });
 
 test('does NOT fall back when codex returns non-zero exit (real error)', async () => {

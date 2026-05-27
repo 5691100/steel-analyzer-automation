@@ -23,11 +23,7 @@ export async function callCodex(prompt, opts = {}) {
 
   const codexUnavailable =
     result.error?.code === 'ENOENT' ||
-    result.status === null ||
-    (typeof result.stderr === 'string' && (
-      result.stderr.includes('command not found') ||
-      result.stderr.includes('No such file')
-    ));
+    (result.status === null && result.error?.code === 'ETIMEDOUT');
 
   if (codexUnavailable) {
     const fallback = spawnFn('claude', ['--dangerously-skip-permissions', '-p', '-'], {

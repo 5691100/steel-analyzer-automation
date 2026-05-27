@@ -56,6 +56,7 @@ describe('Pipeline Runner', () => {
     await runPipeline(runId, folderId, notifyFn, {
       getDrive, doDownload, doAnalysis, doQA,
       doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
       doUpload, doPublish, waitForGate, makeGateKb, runsDir,
     });
 
@@ -118,6 +119,7 @@ describe('Pipeline Runner', () => {
       doAnalysis: async () => ({ ok: true }),
       doQA: async () => ({ verdict: 'ACCEPTED' }),
       doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
       doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gate-order-run.json' }),
       waitForGate,
@@ -174,6 +176,7 @@ describe('Pipeline Runner', () => {
       doQA: async () => ({ verdict: 'ACCEPTED' }),
       doSelfChecklist: async () => { selfChecklistCalled = true; return { passed: true, items: [] }; },
       doPublish: async () => { publishCalled = true; return { ok: true, publishedPath: '/dashboard/runs/checklist-publish-run.json' }; },
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
       waitForGate: async () => 'approve',
       makeGateKb: () => ({ inline_keyboard: [] }),
@@ -200,6 +203,7 @@ describe('Pipeline Runner', () => {
       doQA: async () => ({ verdict: 'ACCEPTED' }),
       doSelfChecklist: async (...args) => { capturedArgs.push(...args); return { passed: true, items: [] }; },
       doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/sig-check-run.json' }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
       waitForGate: async () => 'approve',
       makeGateKb: () => ({ inline_keyboard: [] }),
@@ -210,6 +214,101 @@ describe('Pipeline Runner', () => {
       `doSelfChecklist should be called with exactly 1 argument, got ${capturedArgs.length}: ${JSON.stringify(capturedArgs)}`);
     assert.ok(capturedArgs[0].includes(runId) || capturedArgs[0].endsWith(runId),
       `first arg should be runDir containing runId, got: ${capturedArgs[0]}`);
+  });
+
+  // ── GEPA phase tests ──────────────────────────────────────────────────────
+
+  it('calls doGepaReview after dashboard publish', async () => {
+    const runId = 'gepa-called-run';
+    const { runsDir, runDir } = setupRun(tempDir, runId, 3, true);
+    let gepaCalledWith = null;
+
+    await runPipeline(runId, 'folder', async () => {}, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-called-run.json' }),
+      doGepaReview: async (rd) => { gepaCalledWith = rd; return { verdict: 'OK', proposals: [] }; },
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(gepaCalledWith, 'doGepaReview should have been called');
+    assert.ok(gepaCalledWith.includes(runId), `doGepaReview should be called with runDir containing runId, got: ${gepaCalledWith}`);
+  });
+
+  it('notifies on GEPA WARN', async () => {
+    const runId = 'gepa-warn-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-warn-run.json' }),
+      doGepaReview: async () => ({ verdict: 'WARN', reason: 'timeout' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(notifications.some(n => typeof n === 'string' && n.includes('GEPA')),
+      `Expected notification containing 'GEPA', got: ${JSON.stringify(notifications)}`);
+  });
+
+  it('notifies on proposals found', async () => {
+    const runId = 'gepa-proposals-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-proposals-run.json' }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [{ id: 'GEPA-001' }], provider: 'codex' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(notifications.some(n => typeof n === 'string' && n.includes('1 proposal')),
+      `Expected notification containing '1 proposal', got: ${JSON.stringify(notifications)}`);
+  });
+
+  it('pipeline continues even if GEPA returns WARN', async () => {
+    const runId = 'gepa-continue-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const gatesCalled = [];
+
+    await runPipeline(runId, 'folder', async () => {}, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-continue-run.json' }),
+      doGepaReview: async () => ({ verdict: 'WARN', reason: 'timeout' }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async (runId, gateId) => { gatesCalled.push(gateId); return 'approve'; },
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(gatesCalled.includes('g5_upload'), `Pipeline should reach G5, gates called: ${gatesCalled}`);
   });
 
   it('doCodexReview is NOT called in the pipeline', async () => {
@@ -224,6 +323,7 @@ describe('Pipeline Runner', () => {
       doQA: async () => ({ verdict: 'ACCEPTED' }),
       doSelfChecklist: async () => ({ passed: true, items: [] }),
       doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/no-codex-run.json' }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
       doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
       doCodexReview: async () => { codexCalled = true; return { verdict: 'APPROVED', notes: '', proposals: [] }; },
       waitForGate: async () => 'approve',
@@ -304,5 +404,56 @@ describe('Pipeline Runner', () => {
     });
 
     assert.equal(qaCount, 1, 'QA should only run once before G3 reject stops loop');
+  });
+
+  it('pipeline continues to G5 even if doGepaReview throws', async () => {
+    const runId = 'gepa-throws-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const gatesCalled = [];
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-throws-run.json' }),
+      doGepaReview: async () => { throw new Error('analysis.json not found'); },
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async (runId, gateId) => { gatesCalled.push(gateId); return 'approve'; },
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(gatesCalled.includes('g5_upload'),
+      `Pipeline should reach G5 even when GEPA throws, gates called: ${gatesCalled}`);
+    assert.ok(notifications.some(n => typeof n === 'string' && n.includes('GEPA') && n.includes('помилка')),
+      `Expected GEPA error notification, got: ${JSON.stringify(notifications)}`);
+  });
+
+  it('notifies "ошибок не найдено" when GEPA verdict is OK with no proposals', async () => {
+    const runId = 'gepa-ok-empty-run';
+    const { runsDir } = setupRun(tempDir, runId, 3, true);
+    const notifications = [];
+    const notifyFn = async (text) => notifications.push(text);
+
+    await runPipeline(runId, 'folder', notifyFn, {
+      getDrive: async () => ({}),
+      doDownload: async () => { setupRun(tempDir, runId, 3, true); },
+      doAnalysis: async () => ({ ok: true }),
+      doQA: async () => ({ verdict: 'ACCEPTED' }),
+      doSelfChecklist: async () => ({ passed: true, items: [] }),
+      doPublish: async () => ({ ok: true, publishedPath: '/dashboard/runs/gepa-ok-empty-run.json' }),
+      doGepaReview: async () => ({ verdict: 'OK', proposals: [] }),
+      doUpload: async () => ({ md5Status: 'OK', manifestPath: 'manifest.json' }),
+      waitForGate: async () => 'approve',
+      makeGateKb: () => ({ inline_keyboard: [] }),
+      runsDir,
+    });
+
+    assert.ok(notifications.some(n => typeof n === 'string' && n.includes('GEPA') && n.includes('ошибок не найдено')),
+      `Expected "GEPA: ошибок не найдено" notification, got: ${JSON.stringify(notifications)}`);
   });
 });

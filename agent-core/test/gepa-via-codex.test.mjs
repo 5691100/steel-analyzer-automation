@@ -86,7 +86,7 @@ test('returns WARN on codex error exit', async () => {
 
 test('returns OK with proposals, writes gepa-register.json', async () => {
   const proposals = [
-    { id: 'G1', description: 'Check weld thickness', severity: 'medium' },
+    { id: 'G1', description: 'Check weld thickness', severity: 'medium', standard_assumption: 'EN 1993', proposed_deviation: 'used S355' },
   ];
   const writtenFiles = {};
   const deps = makeBaseDeps({
@@ -106,7 +106,8 @@ test('returns OK with proposals, writes gepa-register.json', async () => {
   assert.equal(result.proposals.length, 1);
   assert.equal(result.proposals[0].id, 'G1');
   assert.equal(result.proposals[0].raised_by, 'codex');
-  assert.equal(result.proposals[0].owner_decision, null);
+  // owner_decision must be "pending", not null
+  assert.equal(result.proposals[0].owner_decision, 'pending');
   assert.ok(result.gepaPath.endsWith('gepa-register.json'));
   assert.equal(result.provider, 'codex');
 
@@ -116,8 +117,53 @@ test('returns OK with proposals, writes gepa-register.json', async () => {
   const written = JSON.parse(writtenFiles[writtenPath]);
   assert.equal(written.schema, 'steel.gepa-register.v1');
   assert.equal(written.run_id, 'run-xyz');
-  assert.equal(written.verdict, 'OK');
+  // no verdict field at register root (additionalProperties: false)
+  assert.equal(written.verdict, undefined);
   assert.equal(written.proposals.length, 1);
+
+  // Proposal must only have schema-allowed fields
+  const prop = written.proposals[0];
+  assert.equal(prop.owner_decision, 'pending');
+  // unknown fields must be stripped
+  assert.equal(prop.severity, undefined);
+});
+
+test('proposal fields are stripped to schema-allowed fields only', async () => {
+  const proposals = [
+    {
+      id: 'G2',
+      description: 'Extra field test',
+      severity: 'high',
+      standard_assumption: 'EN 1090',
+      proposed_deviation: 'alternative welding',
+      drawing_ref: 'DWG-001',
+      unknownField: 'should be removed',
+    },
+  ];
+  const writtenFiles = {};
+  const deps = makeBaseDeps({
+    callCodex: async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({ proposals }),
+      provider: 'claude',
+    }),
+    writeFile: async (filePath, content) => {
+      writtenFiles[filePath] = content;
+    },
+  });
+
+  const result = await runGepaReview('/tmp/run-fields', deps);
+  const written = JSON.parse(Object.values(writtenFiles)[0]);
+  const prop = written.proposals[0];
+
+  // Schema-allowed fields must be present
+  assert.equal(prop.id, 'G2');
+  assert.equal(prop.description, 'Extra field test');
+  assert.equal(prop.owner_decision, 'pending');
+  assert.equal(prop.drawing_ref, 'DWG-001');
+  // Unknown fields must be absent
+  assert.equal(prop.severity, undefined);
+  assert.equal(prop.unknownField, undefined);
 });
 
 test('returns OK with empty proposals', async () => {

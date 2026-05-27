@@ -8,6 +8,7 @@ import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
 import { dispatchGeminiAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
 import { runSelfChecklist, formatFailedItems } from './self-checklist.mjs';
+import { runGepaReview } from './gepa-via-codex.mjs';
 import { resolveGate } from './gate-manager.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
 
@@ -127,6 +128,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
   doAnalysis = dispatchGeminiAnalysis,
   doQA = dispatchAntigravityQA,
   doSelfChecklist = runSelfChecklist,
+  doGepaReview = runGepaReview,
   doUpload = driveUpload,
   doPublish = defaultPublishRun,
   makeGateKb = defaultMakeGateKb,
@@ -240,6 +242,20 @@ export async function runPipeline(runId, folderId, notifyFn, {
       : dashResult.publishedPath;
     log(runDir, { schema: 'steel.dashboard.v1', publishedPath: dashResult.publishedPath });
     await notifyFn(`📊 Dashboard: ${dashboardUrl}`);
+
+    // Phase: GEPA review (non-blocking — errors are caught and reported)
+    try {
+      const gepaResult = await doGepaReview(runDir);
+      if (gepaResult.verdict === 'WARN') {
+        await notifyFn(`⚠️ GEPA review warning: ${gepaResult.reason ?? 'unknown'}. Proceeding.`);
+      } else if (gepaResult.proposals?.length > 0) {
+        await notifyFn(`🔍 GEPA: ${gepaResult.proposals.length} proposal(s) from ${gepaResult.provider}. Check gepa-register.json.`);
+      } else {
+        await notifyFn(`✅ GEPA: ошибок не найдено`);
+      }
+    } catch (gepaErr) {
+      await notifyFn(`⚠️ GEPA: помилка — ${gepaErr.message}. Продовжуємо.`);
+    }
 
     // G5 — Upload approval
     const g5 = await askGate(

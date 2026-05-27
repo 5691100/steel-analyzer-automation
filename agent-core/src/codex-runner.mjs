@@ -26,7 +26,7 @@ export async function callCodex(prompt, opts = {}) {
     (result.status === null && result.error?.code === 'ETIMEDOUT');
 
   if (codexUnavailable) {
-    const fallback = spawnFn('claude', ['--dangerously-skip-permissions', '-p', '-'], {
+    const fallback = spawnFn('claude', ['-p', '-'], {
       input: prompt,
       encoding: 'utf8',
       timeout,

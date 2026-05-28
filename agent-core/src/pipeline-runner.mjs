@@ -171,7 +171,34 @@ export async function runPipeline(runId, folderId, notifyFn, {
     // Initial Claude analysis
     await notifyFn('⏳ Claude анализ запущен...');
     await doAnalysis(runId, runDir, sourcesDir);
-    await notifyFn('✅ Claude анализ завершён, workbooks сгенерированы');
+
+    // Send analysis summary
+    try {
+      const analysisPath = path.join(runDir, 'analysis.json');
+      const analysis = JSON.parse(fs.readFileSync(analysisPath, 'utf8'));
+      const subs = analysis.subprojects ?? [];
+      const totalKg = analysis.totals?.weight_kg
+        ?? subs.reduce((s, sp) => s + (sp.totals?.weight_kg ?? 0), 0);
+      const totalPaint = analysis.totals?.paint_m2
+        ?? subs.reduce((s, sp) => s + (sp.totals?.paint_m2 ?? 0), 0);
+      const totalT = totalKg > 0 ? (totalKg / 1000).toFixed(1) : '—';
+      const paintStr = totalPaint > 0 ? totalPaint.toFixed(0) : '—';
+      const subList = subs.map(sp => {
+        const t = sp.totals?.weight_kg ? (sp.totals.weight_kg / 1000).toFixed(1) : '—';
+        return `  • ${esc(sp.name)}: ${t} т`;
+      }).join('\n');
+      const summary = [
+        `✅ <b>Анализ завершён</b>`,
+        `Run: <code>${runId}</code>`,
+        ``,
+        `⚖️ Общий вес: <b>${totalT} т</b>`,
+        `🎨 Покраска: <b>${paintStr} м²</b>`,
+        subs.length > 0 ? `\n<b>Подпроекты:</b>\n${subList}` : '',
+      ].filter(Boolean).join('\n');
+      await notifyFn(summary);
+    } catch (e) {
+      await notifyFn('✅ Claude анализ завершён, workbooks сгенерированы');
+    }
 
     // Correction loop: G2 (QA) → optionally G3 (correction) → repeat
     let qaResult;
@@ -260,7 +287,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
     // G5 — Upload approval
     const g5 = await askGate(
       runId, 'g5_upload',
-      `📤 Run: <code>${runId}</code>\nSelf-checklist passed.\n\nЗагрузить результаты в Drive?`,
+      `📤 Run: <code>${runId}</code>\nSelf-checklist ✅\nDashboard: ${dashboardUrl}\n\nЗагрузить результаты в Drive?`,
       notifyFn, makeGateKb, waitForGate, gateTimeoutMs
     );
     if (g5 !== 'approve') {

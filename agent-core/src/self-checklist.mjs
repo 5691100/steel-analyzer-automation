@@ -65,7 +65,11 @@ export async function runSelfChecklist(runDir, deps = {}) {
 
   // ── 3. totals-positive ────────────────────────────────────────────────────
   {
-    const weight = analysis?.totals?.weight_kg;
+    // Fall back to summing subproject totals if top-level totals is missing
+    const topWeight = analysis?.totals?.weight_kg;
+    const weight = (typeof topWeight === 'number' && topWeight > 0)
+      ? topWeight
+      : (analysis?.subprojects ?? []).reduce((sum, s) => sum + (s?.totals?.weight_kg ?? 0), 0) || undefined;
     const ok = typeof weight === 'number' && weight > 0;
     items.push({
       id: 'totals-positive',

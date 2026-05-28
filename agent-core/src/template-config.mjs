@@ -15,7 +15,7 @@ export const WORKBOOK_STYLE = {
 
 export const DESCRIPTION_SHEETS = [
   'Project Summary',
-  'Scope / Classification',
+  'Scope/Classification',
   'Exclusions',
   'Coating Summary',
   'Coating Detail',

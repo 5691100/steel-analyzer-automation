@@ -114,27 +114,59 @@ export async function dispatchClaudeAnalysis(runId, runDir, sourcesDir, {
 
   const MAX_SOURCE_CHARS = 80_000;
   const MAX_DRAWING_CHARS = 20_000;
+  const MAX_TOTAL_PROMPT_CHARS = 160_000; // stay within standard Claude context
   const DRAWING_PATTERN = /teräs(?:kokoonpanot|osakuvat)/i;
+  // Low-priority files to skip if total budget is tight (legal/contract docs)
+  const SKIP_PATTERN = /yse.{0,10}(1998|eng)|construction.contract.programme/i;
+
+  // File priority: BOM/material lists > RFQ/structural > drawings > other
+  function filePriority(name) {
+    const n = name.toLowerCase();
+    if (/material.list|bom|teräsluettelo|stückliste/.test(n)) return 0;
+    if (/rfq|request.for.quot|tarjouspyyntö/.test(n)) return 1;
+    if (/\.(xlsx|csv)\.txt$/.test(n)) return 1;
+    if (/drawing|piirustus|teräs/.test(n)) return 2;
+    if (/\.dwg\.txt$|\.ifc\.txt$/.test(n)) return 3;
+    return 2;
+  }
 
   // Recursively find all .txt files in sources and subdirectories
   const allTxtPaths = findFilesRecursive(sourcesDir, f => f.endsWith('.txt'));
-  const sourceTexts = {};
+
+  // Per-file truncation
+  const candidates = [];
   for (const txtPath of allTxtPaths) {
-    // Use relative path from sourcesDir as the key for clarity
     const relName = path.relative(sourcesDir, txtPath);
+    if (SKIP_PATTERN.test(relName)) {
+      console.warn(`Skipping low-priority file: ${relName}`);
+      continue;
+    }
     let text = fs.readFileSync(txtPath, 'utf8');
     const limit = DRAWING_PATTERN.test(relName) ? MAX_DRAWING_CHARS : MAX_SOURCE_CHARS;
     if (text.length > limit) {
       console.warn(`Truncating ${relName} (${text.length} chars → ${limit})`);
       text = text.slice(0, limit) + '\n[TRUNCATED]';
     }
+    candidates.push({ relName, text, priority: filePriority(relName) });
+  }
+
+  // Sort by priority, then fill up to global budget
+  candidates.sort((a, b) => a.priority - b.priority);
+  const sourceTexts = {};
+  let totalChars = 0;
+  for (const { relName, text, priority } of candidates) {
+    if (totalChars + text.length > MAX_TOTAL_PROMPT_CHARS) {
+      console.warn(`Global budget reached — skipping ${relName} (priority ${priority}, ${text.length} chars)`);
+      continue;
+    }
     sourceTexts[relName] = text;
+    totalChars += text.length;
   }
 
   if (Object.keys(sourceTexts).length === 0) {
     throw new Error(`No .txt source files found in ${sourcesDir} or its subdirectories. Check that msg/zip extraction and PDF conversion completed.`);
   }
-  console.log(`Found ${Object.keys(sourceTexts).length} source text files (recursive scan)`);
+  console.log(`Included ${Object.keys(sourceTexts).length}/${candidates.length} source text files (${totalChars} chars total, budget ${MAX_TOTAL_PROMPT_CHARS})`);
 
   let prompt = buildAnalysisPrompt(runId, sourceTexts);
   if (customComment) {

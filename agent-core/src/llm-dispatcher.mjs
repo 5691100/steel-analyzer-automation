@@ -201,6 +201,7 @@ export async function dispatchClaudeAnalysis(runId, runDir, sourcesDir, {
       input: prompt,
       timeout: 4_200_000,
       encoding: 'utf8',
+      maxBuffer: 50 * 1024 * 1024,
       cwd: '/tmp'
     });
     const elapsedSec = ((Date.now() - dispatchStart) / 1000).toFixed(1);

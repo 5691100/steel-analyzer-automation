@@ -196,20 +196,81 @@ async function setupOauth(params) {
   console.log(`node steel-drive.mjs setup-oauth --clientId ${clientId} --clientSecret ${clientSecret} --code <CODE>`);
 }
 
-async function list(drive, runId, folderId) {
-  if (!folderId) throw new Error('--folder <folder_id> is required for list');
-  console.log(`Listing folder ${folderId} for run ${runId}...`);
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+async function listFolder(drive, folderId) {
   const res = await drive.files.list({
     q: `'${folderId}' in parents and trashed = false`,
     fields: 'files(id, name, md5Checksum, size, mimeType)',
+    pageSize: 1000,
   });
-  const files = res.data.files || [];
-  const filtered = files.filter(f =>
+  return res.data.files || [];
+}
+
+async function downloadRecursive(drive, folderId, destDir, items, depth = 0) {
+  const prefix = '  '.repeat(depth);
+  const entries = await listFolder(drive, folderId);
+  console.log(`${prefix}Listing folder ${folderId}: ${entries.length} entries`);
+
+  for (const f of entries) {
+    if (f.mimeType === FOLDER_MIME) {
+      const subDir = join(destDir, f.name);
+      fs.mkdirSync(subDir, { recursive: true });
+      console.log(`${prefix}→ Folder: ${f.name}/`);
+      await downloadRecursive(drive, f.id, subDir, items, depth + 1);
+      continue;
+    }
+
+    // Skip Google Workspace files (Docs, Sheets, Slides, etc.)
+    if (f.mimeType && f.mimeType.startsWith('application/vnd.google-apps.')) {
+      console.log(`${prefix}  Skipping Google Workspace file: ${f.name} (${f.mimeType})`);
+      continue;
+    }
+
+    // Skip items without size (shortcuts, unknown)
+    if (f.size == null) {
+      console.log(`${prefix}  Skipping non-binary item: ${f.name}`);
+      continue;
+    }
+
+    const destPath = join(destDir, f.name);
+    console.log(`${prefix}  Downloading ${f.name} (${f.id})...`);
+    const res = await drive.files.get({ fileId: f.id, alt: 'media' }, { responseType: 'stream' });
+    const dest = fs.createWriteStream(destPath);
+    await new Promise((resolve, reject) => {
+      res.data.on('end', resolve).on('error', reject).pipe(dest);
+    });
+
+    const localMd5 = await calculateMd5(destPath);
+    console.log(`${prefix}  ✓ MD5: ${localMd5}`);
+    if (f.md5Checksum && f.md5Checksum !== localMd5) {
+      console.error(`FATAL: MD5 mismatch for ${f.name}: expected ${f.md5Checksum}, got ${localMd5}`);
+      process.exit(1);
+    }
+    items.push({
+      drive_file_id: f.id,
+      name: f.name,
+      size: parseInt(f.size || 0),
+      drive_md5: f.md5Checksum,
+      local_md5: localMd5,
+      downloaded_at: new Date().toISOString(),
+    });
+  }
+}
+
+// Legacy flat list for CLI `list` command
+async function list(drive, runId, folderId) {
+  if (!folderId) throw new Error('--folder <folder_id> is required for list');
+  console.log(`Listing folder ${folderId} for run ${runId}...`);
+  const files = await listFolder(drive, folderId);
+  const binary = files.filter(f =>
     f.size != null &&
     (!f.mimeType || !f.mimeType.startsWith('application/vnd.google-apps.'))
   );
-  console.table(filtered.map(f => ({ name: f.name, id: f.id, md5: f.md5Checksum, size: f.size })));
-  return filtered;
+  const folders = files.filter(f => f.mimeType === FOLDER_MIME);
+  console.table(binary.map(f => ({ name: f.name, id: f.id, md5: f.md5Checksum, size: f.size })));
+  if (folders.length) console.log(`Subfolders (${folders.length}): ${folders.map(f => f.name).join(', ')} — use download to recurse`);
+  return binary;
 }
 
 export function mergeDownloadManifest(existing, next) {
@@ -230,7 +291,6 @@ export function mergeDownloadManifest(existing, next) {
 }
 
 export async function download(drive, runId, folderId) {
-  const files = await list(drive, runId, folderId);
   const sourcesDir = join(RUNS_DIR, runId, 'sources');
   if (!fs.existsSync(sourcesDir)) fs.mkdirSync(sourcesDir, { recursive: true });
 
@@ -238,34 +298,8 @@ export async function download(drive, runId, folderId) {
   const items = [];
   const startedAt = new Date().toISOString();
 
-  for (const file of files) {
-    const destPath = join(sourcesDir, file.name);
-    console.log(`Downloading ${file.name} (${file.id})...`);
-
-    const res = await drive.files.get({ fileId: file.id, alt: 'media' }, { responseType: 'stream' });
-    const dest = fs.createWriteStream(destPath);
-
-    await new Promise((resolve, reject) => {
-      res.data.on('end', resolve).on('error', reject).pipe(dest);
-    });
-
-    const localMd5 = await calculateMd5(destPath);
-    console.log(`  ✓ MD5: ${localMd5}`);
-    if (file.md5Checksum && file.md5Checksum !== localMd5) {
-      console.error(`FATAL: MD5 mismatch for ${file.name}`);
-      console.error(`  Expected: ${file.md5Checksum}`);
-      console.error(`  Got:      ${localMd5}`);
-      process.exit(1);
-    }
-    items.push({
-      drive_file_id: file.id,
-      name: file.name,
-      size: parseInt(file.size || 0),
-      drive_md5: file.md5Checksum,
-      local_md5: localMd5,
-      downloaded_at: new Date().toISOString()
-    });
-  }
+  console.log(`Downloading folder ${folderId} for run ${runId} (recursive)...`);
+  await downloadRecursive(drive, folderId, sourcesDir, items);
 
   const payload = {
     run_id: runId, drive_folder_id: folderId, started_at: startedAt,

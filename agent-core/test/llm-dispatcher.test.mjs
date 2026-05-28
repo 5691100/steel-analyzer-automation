@@ -25,7 +25,7 @@ describe('dispatchOpenChatQuestion', () => {
     assert.ok(answer.length > 0, 'answer should not be empty');
   });
 
-  it('returns a string answer for an antigravity agent, calling claude with skip-permissions flag', async () => {
+  it('returns a string answer for an antigravity agent, calling claude -p -', async () => {
     let calledCmd, calledArgs, calledOpts;
     const answer = await dispatchOpenChatQuestion(
       'run-test',
@@ -48,7 +48,7 @@ describe('dispatchOpenChatQuestion', () => {
     );
     assert.equal(answer, 'В источниках 42 профиля.');
     assert.equal(calledCmd, 'claude');
-    assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '-p', '-']);
+    assert.deepEqual(calledArgs, ['-p', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('Сколько профилей?'));
   });
 
@@ -63,7 +63,7 @@ describe('dispatchOpenChatQuestion', () => {
 });
 
 describe('dispatchClaudeAnalysis', () => {
-  it('calls claude binary with --dangerously-skip-permissions, -p, and - with prompt in stdin', async () => {
+  it('calls claude binary with -p and - with prompt in stdin', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-disp-test-'));
     const runDir = path.join(tempDir, 'run');
     const sourcesDir = path.join(runDir, 'sources');
@@ -90,7 +90,7 @@ describe('dispatchClaudeAnalysis', () => {
     });
 
     assert.equal(calledCmd, 'claude');
-    assert.deepEqual(calledArgs, ['--dangerously-skip-permissions', '-p', '-']);
+    assert.deepEqual(calledArgs, ['-p', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('run-123'));
     assert.equal(calledOpts.cwd, '/tmp');
     fs.rmSync(tempDir, { recursive: true, force: true });

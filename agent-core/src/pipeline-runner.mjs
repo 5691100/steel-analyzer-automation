@@ -77,6 +77,73 @@ function preprocessSources(sourcesDir) {
     }
   }
 
+  // Convert Excel files (.xlsx, .xls) → .txt via openpyxl
+  const xlsxFiles = findFiles(sourcesDir, f => /\.(xlsx|xls)$/i.test(f));
+  const xlsxScript = `
+import sys, openpyxl, json
+wb = openpyxl.load_workbook(sys.argv[1], read_only=True, data_only=True)
+out = []
+for sh in wb.sheetnames:
+    ws = wb[sh]
+    out.append(f"=== Sheet: {sh} ===")
+    for row in ws.iter_rows(values_only=True):
+        cells = [str(c) if c is not None else '' for c in row]
+        if any(c.strip() for c in cells):
+            out.append('\\t'.join(cells))
+print('\\n'.join(out))
+`.trim();
+  for (const xlsxPath of xlsxFiles) {
+    const txtPath = xlsxPath + '.txt';
+    if (fs.existsSync(txtPath)) continue;
+    console.log(`Converting Excel: ${path.relative(sourcesDir, xlsxPath)}...`);
+    const r = spawnSync('python3', ['-c', xlsxScript, xlsxPath], {
+      encoding: 'utf8', timeout: 60_000
+    });
+    if (r.status !== 0) {
+      console.warn(`Excel conversion failed for ${path.basename(xlsxPath)}: ${r.stderr?.slice(0, 200)}`);
+    } else {
+      fs.writeFileSync(txtPath, r.stdout, 'utf8');
+      console.log(`  ✓ Excel converted: ${path.basename(xlsxPath)} (${r.stdout.length} chars)`);
+    }
+  }
+
+  // Convert IFC files → .txt via ifcopenshell (extract elements with quantities)
+  const ifcFiles = findFiles(sourcesDir, f => f.toLowerCase().endsWith('.ifc'));
+  const ifcScript = `
+import sys, ifcopenshell
+ifc = ifcopenshell.open(sys.argv[1])
+out = ["=== IFC Model: " + sys.argv[1].split('/')[-1] + " ==="]
+for el in ifc.by_type('IfcElement'):
+    name = getattr(el, 'Name', '') or ''
+    desc = getattr(el, 'Description', '') or ''
+    tag = getattr(el, 'Tag', '') or ''
+    out.append(f"{el.is_a()}\\t{name}\\t{desc}\\t{tag}")
+print('\\n'.join(out[:5000]))
+`.trim();
+  for (const ifcPath of ifcFiles) {
+    const txtPath = ifcPath + '.txt';
+    if (fs.existsSync(txtPath)) continue;
+    console.log(`Converting IFC: ${path.relative(sourcesDir, ifcPath)}...`);
+    const r = spawnSync('python3', ['-c', ifcScript, ifcPath], {
+      encoding: 'utf8', timeout: 120_000
+    });
+    if (r.status !== 0) {
+      console.warn(`IFC conversion failed for ${path.basename(ifcPath)}: ${r.stderr?.slice(0, 200)}`);
+    } else {
+      fs.writeFileSync(txtPath, r.stdout, 'utf8');
+      console.log(`  ✓ IFC converted: ${path.basename(ifcPath)} (${r.stdout.length} chars)`);
+    }
+  }
+
+  // DWG files: ezdxf cannot read binary DWG (only DXF). Log filename only as context.
+  const dwgFiles = findFiles(sourcesDir, f => f.toLowerCase().endsWith('.dwg'));
+  if (dwgFiles.length > 0) {
+    const dwgList = dwgFiles.map(p => path.relative(sourcesDir, p)).join('\n');
+    const dwgTxtPath = path.join(sourcesDir, '_dwg_index.txt');
+    fs.writeFileSync(dwgTxtPath, `=== DWG Drawings (geometry not extractable) ===\n${dwgList}`, 'utf8');
+    console.log(`  ✓ DWG index written: ${dwgFiles.length} files`);
+  }
+
   // Count total usable source files (recursive)
   const usableFiles = findFiles(sourcesDir, f => /\.(txt|pdf|xlsx|csv)$/i.test(f));
   console.log(`Preprocessing complete: ${usableFiles.length} usable source files found`);

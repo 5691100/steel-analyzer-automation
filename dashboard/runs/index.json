@@ -1,5 +1,14 @@
 [
   {
+    "run_id": "steel-20260528-SG2UV",
+    "project_name": "unknown",
+    "status": "failed",
+    "created_at": "2026-05-28T16:06:10.704Z",
+    "totals": null,
+    "subproject_count": 0,
+    "error": "{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Only files with binary content can be downloaded. Use Export with Docs Editors files.\",\n    \"errors\": [\n      {\n        \"message\": \"Only files with binary content can be downloaded. Use Export with Docs Editors files.\",\n        \"domain\": \"global\",\n        \"reason\": \"fileNotDownloadable\",\n        \"location\": \"alt\",\n        \"locationType\": \"parameter\"\n      }\n    ]\n  }\n}\n"
+  },
+  {
     "run_id": "steel-20260526-XYWH0",
     "project_name": "PKI2683",
     "status": "complete",

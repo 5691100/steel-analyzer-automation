@@ -81,7 +81,7 @@ agent-core/
     telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
     pipeline-runner.mjs               runPipeline(): G1:analysis, G2:QA, G3:correction ×3, Phase:self-checklist, Phase:dashboard, Phase:GEPA (non-blocking, via gepa-via-codex.mjs), G5:upload
     gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
-    llm-dispatcher.mjs                dispatchGeminiAnalysis() -> analysis.json, dispatchAntigravityQA(), dispatchCodexReview() via callCodex, writeGepaRegister(), dispatchOpenChatQuestion(); exports extractJsonFromText (410 lines)
+    llm-dispatcher.mjs                dispatchClaudeAnalysis() -> analysis.json, dispatchAntigravityQA(), dispatchCodexReview() via callCodex, writeGepaRegister(), dispatchOpenChatQuestion(); exports extractJsonFromText (410 lines)
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     template-config.mjs               Externalized template config: sheet names, column defs, category aliases (198 lines)
     dashboard-generator.mjs           generateDashboard() -> dashboard.html; uploaded to Drive with xlsx (206 lines)

@@ -5,16 +5,16 @@ export const pendingGates = new Map(); // runId → { gateId, resolve }
 export const chatQuestionState = new Map(); // chatId → { runId, gateId, agent }
 
 export const GATE_AGENT = {
-  g1_gemini: 'antigravity',
+  g1_claude: 'claude',
   g2_qa: 'claude',
-  g3_correction: 'antigravity',
+  g3_correction: 'claude',
   g4_codex: 'codex',
-  g5_upload: 'antigravity',
+  g5_upload: 'claude',
 };
 
 export const GATE_PROMPTS = {
-  g1_gemini: (runId) => `🔵 Run: <code>${runId}</code>\n\nЗапустить Gemini-анализ источников?`,
-  g2_qa: (runId) => `📋 Run: <code>${runId}</code>\nGemini-анализ завершён.\n\nЗапустить Claude QA?`,
+  g1_claude: (runId) => `🔵 Run: <code>${runId}</code>\n\nЗапустить Claude-анализ источников?`,
+  g2_qa: (runId) => `📋 Run: <code>${runId}</code>\nClaude анализ завершён.\n\nЗапустить QA?`,
   g3_correction: (runId, iter = 1) =>
     `🔄 Run: <code>${runId}</code>\nQA выявил дефекты (итерация ${iter}/3).\n\nЗапустить correction loop?`,
   g4_codex: (runId) =>
@@ -24,12 +24,12 @@ export const GATE_PROMPTS = {
 };
 
 export const GATE_HELP = {
-  g1_gemini:
-    'Gemini скачает источники из Drive и сгенерирует workbooks (BoM, MaterialList, Description).',
+  g1_claude:
+    'Claude скачает источники из Drive и сгенерирует workbooks (BoM, MaterialList, Description).',
   g2_qa:
     'Claude проверит workbooks: профили, покраска, итоги, полнота данных.',
   g3_correction:
-    'Gemini повторит анализ с учётом дефектов из QA-отчёта.',
+    'Claude повторит анализ с учётом дефектов из QA-отчёта.',
   g4_codex:
     'CodexClaw выполнит финальную проверку и подготовит пакет для загрузки.',
   g5_upload:

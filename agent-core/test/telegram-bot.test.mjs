@@ -216,7 +216,7 @@ describe('Telegram Bot Logic', () => {
     pendingGates.clear();
 
     let resolvedDecision = null;
-    const gatePromise = registerGate('run-gate-1', 'g1_gemini');
+    const gatePromise = registerGate('run-gate-1', 'g1_claude');
     // Intercept resolution
     gatePromise.then(d => { resolvedDecision = d; });
 
@@ -230,9 +230,9 @@ describe('Telegram Bot Logic', () => {
           message_id: 10,
           chat: { id: 12345, type: 'private' },
           date: Math.floor(Date.now() / 1000),
-          text: 'Запустить Gemini?',
+          text: 'Запустить Claude-анализ источников?',
         },
-        data: 'gate:run-gate-1:g1_gemini:approve',
+        data: 'gate:run-gate-1:g1_claude:approve',
         chat_instance: '1',
       },
     });
@@ -308,7 +308,7 @@ describe('Telegram Bot Logic', () => {
     const { registerGate, pendingGates } = await import('../src/gate-manager.mjs');
     pendingGates.clear();
 
-    registerGate('run-gate-4', 'g1_gemini'); // registered for g1_gemini
+    registerGate('run-gate-4', 'g1_claude'); // registered for g1_claude
 
     const answeredCallbacks = [];
     // Override answerCallbackQuery to capture response
@@ -389,7 +389,7 @@ describe('Telegram Bot Logic', () => {
       JSON.stringify({ schema: 'steel.run-request.v1', run_id: runId, created_at: '2026-01-01T00:00:00Z' }) + '\n'
     );
 
-    registerGate(runId, 'g1_gemini'); // simulate pending gate
+    registerGate(runId, 'g1_claude'); // simulate pending gate
 
     await bot.handleUpdate({
       update_id: 3002,

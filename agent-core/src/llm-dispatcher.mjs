@@ -94,7 +94,7 @@ function extractJsonFromText(text) {
   throw new Error(`Could not extract valid JSON from output (${text.length} chars)`);
 }
 
-export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
+export async function dispatchClaudeAnalysis(runId, runDir, sourcesDir, {
   spawn = spawnSync,
   generate = generateWorkbooks,
   generateDash = generateDashboard,
@@ -160,10 +160,10 @@ export async function dispatchGeminiAnalysis(runId, runDir, sourcesDir, {
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
-      console.log(`Retry ${attempt}/${maxRetries} for Gemini analysis...`);
+      console.log(`Retry ${attempt}/${maxRetries} for Claude analysis...`);
     }
 
-    console.log(`Dispatching Gemini analysis for run ${runId} (prompt: ${promptChars} chars, attempt ${attempt + 1})...`);
+    console.log(`Dispatching Claude analysis for run ${runId} (prompt: ${promptChars} chars, attempt ${attempt + 1})...`);
     const dispatchStart = Date.now();
     const result = spawn('claude', ['--dangerously-skip-permissions', '-p', '-'], {
       input: prompt,

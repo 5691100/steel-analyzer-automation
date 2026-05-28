@@ -1,9 +1,10 @@
 {
-  "sprint": 18,
+  "sprint": 1,
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
   "docs_update": "UPDATED",
   "docs_review": "PASS",
-  "provider": "codex",
-  "ts": "2026-05-27T23:30:00Z"
+  "provider": "claude-split-focus",
+  "ts": "2026-05-28T16:30:00Z",
+  "notes": "Technical reviewer initially REQUEST_CHANGES (gate-manager.mjs missed). Fixed inline. Product reviewer confirmed 139/139 tests, full g1_gemini->g1_claude consistency."
 }

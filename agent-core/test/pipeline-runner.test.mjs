@@ -127,8 +127,8 @@ describe('Pipeline Runner', () => {
       runsDir,
     });
 
-    assert.deepEqual(gatesCalled, ['g1_gemini', 'g2_qa', 'g5_upload'],
-      `Expected gates in order [g1_gemini, g2_qa, g5_upload], got: ${gatesCalled}`);
+    assert.deepEqual(gatesCalled, ['g1_claude', 'g2_qa', 'g5_upload'],
+      `Expected gates in order [g1_claude, g2_qa, g5_upload], got: ${gatesCalled}`);
   });
 
   it('pipeline blocks and returns BLOCKED verdict when self-checklist fails', async () => {
@@ -335,7 +335,7 @@ describe('Pipeline Runner', () => {
   });
 
   it('pipeline stops at G1 when rejected', async () => {
-    const waitForGate = async (runId, gateId) => gateId === 'g1_gemini' ? 'reject' : 'approve';
+    const waitForGate = async (runId, gateId) => gateId === 'g1_claude' ? 'reject' : 'approve';
     let analysisCalledCount = 0;
     const doAnalysis = async () => { analysisCalledCount++; return { ok: true }; };
 

@@ -204,7 +204,10 @@ async function list(drive, runId, folderId) {
     fields: 'files(id, name, md5Checksum, size, mimeType)',
   });
   const files = res.data.files || [];
-  const filtered = files.filter(f => !f.mimeType || !f.mimeType.startsWith('application/vnd.google-apps.'));
+  const filtered = files.filter(f =>
+    f.size != null &&
+    (!f.mimeType || !f.mimeType.startsWith('application/vnd.google-apps.'))
+  );
   console.table(filtered.map(f => ({ name: f.name, id: f.id, md5: f.md5Checksum, size: f.size })));
   return filtered;
 }

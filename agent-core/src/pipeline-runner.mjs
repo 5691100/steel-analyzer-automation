@@ -6,7 +6,7 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { download, getDriveClient, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
-import { dispatchGeminiAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
+import { dispatchClaudeAnalysis, dispatchAntigravityQA } from './llm-dispatcher.mjs';
 import { runSelfChecklist, formatFailedItems } from './self-checklist.mjs';
 import { runGepaReview } from './gepa-via-codex.mjs';
 import { resolveGate } from './gate-manager.mjs';
@@ -125,7 +125,7 @@ async function askGate(runId, gateId, prompt, notifyFn, makeGateKb, waitForGate,
 export async function runPipeline(runId, folderId, notifyFn, {
   getDrive = getDriveClient,
   doDownload = download,
-  doAnalysis = dispatchGeminiAnalysis,
+  doAnalysis = dispatchClaudeAnalysis,
   doQA = dispatchAntigravityQA,
   doSelfChecklist = runSelfChecklist,
   doGepaReview = runGepaReview,
@@ -143,14 +143,14 @@ export async function runPipeline(runId, folderId, notifyFn, {
   try {
     await notifyFn(`🔵 Steel Analyzer запущен\nRun ID: <code>${runId}</code>\nDrive folder: <code>${folderId}</code>`);
 
-    // G1 — Gemini dispatch approval
+    // G1 — Claude analysis dispatch approval
     const g1 = await askGate(
-      runId, 'g1_gemini',
-      `🔵 Run: <code>${runId}</code>\n\nЗапустить Gemini-анализ источников?`,
+      runId, 'g1_claude',
+      `🔵 Run: <code>${runId}</code>\n\nЗапустить Claude-анализ источников?`,
       notifyFn, makeGateKb, waitForGate, gateTimeoutMs
     );
     if (g1 !== 'approve') {
-      await notifyFn(`⛔ Gemini-анализ отменён для run <code>${runId}</code>.`);
+      await notifyFn(`⛔ Анализ отменён для run <code>${runId}</code>.`);
       log(runDir, { schema: 'steel.run-cancelled.v1', run_id: runId, reason: 'G1 rejected' });
       return;
     }
@@ -168,10 +168,10 @@ export async function runPipeline(runId, folderId, notifyFn, {
     preprocessSources(sourcesDir);
     await notifyFn('✅ Предобработка завершена');
 
-    // Initial Gemini analysis
-    await notifyFn('⏳ Gemini анализ запущен...');
+    // Initial Claude analysis
+    await notifyFn('⏳ Claude анализ запущен...');
     await doAnalysis(runId, runDir, sourcesDir);
-    await notifyFn('✅ Gemini анализ завершён, workbooks сгенерированы');
+    await notifyFn('✅ Claude анализ завершён, workbooks сгенерированы');
 
     // Correction loop: G2 (QA) → optionally G3 (correction) → repeat
     let qaResult;
@@ -181,7 +181,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
       // G2 — QA approval
       const g2 = await askGate(
         runId, 'g2_qa',
-        `📋 Run: <code>${runId}</code>\nGemini готов.\n\nЗапустить Claude QA?`,
+        `📋 Run: <code>${runId}</code>\nClaude анализ готов.\n\nЗапустить QA?`,
         notifyFn, makeGateKb, waitForGate, gateTimeoutMs
       );
       if (g2 !== 'approve') {

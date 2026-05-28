@@ -20,7 +20,7 @@ import {
 } from './gate-manager.mjs';
 import { validateRunId, upload as driveUpload, expectedApprovalToken } from '../scripts/steel-drive.mjs';
 import { publishRun as defaultPublishRun } from './publish-run.mjs';
-import { dispatchGeminiAnalysis, dispatchOpenChatQuestion } from './llm-dispatcher.mjs';
+import { dispatchOpenChatQuestion } from './llm-dispatcher.mjs';
 import { STATES, stateLabel } from '../steel-bus/lib/state-machine.mjs';
 
 const __filename = fileURLToPath(import.meta.url);

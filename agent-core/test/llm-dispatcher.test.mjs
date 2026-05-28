@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { dispatchOpenChatQuestion, dispatchGeminiAnalysis, dispatchAntigravityQA, dispatchCodexReview, writeGepaRegister } from '../src/llm-dispatcher.mjs';
+import { dispatchOpenChatQuestion, dispatchClaudeAnalysis, dispatchAntigravityQA, dispatchCodexReview, writeGepaRegister } from '../src/llm-dispatcher.mjs';
 
 describe('dispatchOpenChatQuestion', () => {
   it('returns a string answer for a gemini agent (mocked spawn)', async () => {
     const answer = await dispatchOpenChatQuestion(
       'run-test',
-      'g1_gemini',
+      'g1_claude',
       'Сколько профилей?',
       'gemini',
       {
@@ -29,7 +29,7 @@ describe('dispatchOpenChatQuestion', () => {
     let calledCmd, calledArgs, calledOpts;
     const answer = await dispatchOpenChatQuestion(
       'run-test',
-      'g1_gemini',
+      'g1_claude',
       'Сколько профилей?',
       'antigravity',
       {
@@ -54,7 +54,7 @@ describe('dispatchOpenChatQuestion', () => {
 
   it('throws when spawn returns non-zero exit code', async () => {
     await assert.rejects(
-      dispatchOpenChatQuestion('run-test', 'g1_gemini', 'question', 'gemini', {
+      dispatchOpenChatQuestion('run-test', 'g1_claude', 'question', 'gemini', {
         spawn: () => ({ stdout: '', stderr: 'error', status: 1, error: null }),
       }),
       /failed/i
@@ -62,7 +62,7 @@ describe('dispatchOpenChatQuestion', () => {
   });
 });
 
-describe('dispatchGeminiAnalysis', () => {
+describe('dispatchClaudeAnalysis', () => {
   it('calls claude binary with --dangerously-skip-permissions, -p, and - with prompt in stdin', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-disp-test-'));
     const runDir = path.join(tempDir, 'run');
@@ -71,7 +71,7 @@ describe('dispatchGeminiAnalysis', () => {
     fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
 
     let calledCmd, calledArgs, calledOpts;
-    await dispatchGeminiAnalysis('run-123', runDir, sourcesDir, {
+    await dispatchClaudeAnalysis('run-123', runDir, sourcesDir, {
       spawn: (cmd, args, opts) => {
         calledCmd = cmd;
         calledArgs = args;
@@ -97,7 +97,7 @@ describe('dispatchGeminiAnalysis', () => {
   });
 });
 
-describe('dispatchGeminiAnalysis customComment', () => {
+describe('dispatchClaudeAnalysis customComment', () => {
   it('appends customComment to the prompt sent to agy', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-comment-test-'));
     const runDir = path.join(tempDir, 'run');
@@ -106,7 +106,7 @@ describe('dispatchGeminiAnalysis customComment', () => {
     fs.writeFileSync(path.join(sourcesDir, 'source.txt'), 'steel source', 'utf8');
 
     let capturedInput;
-    await dispatchGeminiAnalysis('run-comment', runDir, sourcesDir, {
+    await dispatchClaudeAnalysis('run-comment', runDir, sourcesDir, {
       spawn: (_cmd, _args, opts) => {
         capturedInput = opts.input;
         return {

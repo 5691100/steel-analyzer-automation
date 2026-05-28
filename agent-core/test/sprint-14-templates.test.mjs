@@ -5,7 +5,7 @@ import path from 'path';
 import os from 'os';
 import assert from 'assert';
 import ExcelJS from 'exceljs';
-import { dispatchGeminiAnalysis } from '../src/llm-dispatcher.mjs';
+import { dispatchClaudeAnalysis } from '../src/llm-dispatcher.mjs';
 
 describe('Sprint 14 Template Decisions', () => {
   let tempDir;
@@ -248,7 +248,7 @@ describe('Sprint 14 Template Decisions', () => {
     fs.writeFileSync(path.join(outputDir, 'stale.xlsx'), 'old non-matching workbook', 'utf8');
     fs.writeFileSync(path.join(outputDir, 'keep.txt'), 'keep', 'utf8');
 
-    await dispatchGeminiAnalysis('run-1', runDir, sourcesDir, {
+    await dispatchClaudeAnalysis('run-1', runDir, sourcesDir, {
       spawn: () => ({
         stdout: JSON.stringify({
           project_name: 'Project',

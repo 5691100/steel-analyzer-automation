@@ -1,4 +1,5 @@
 import { Bot, InlineKeyboard } from 'grammy';
+import { spawn } from 'child_process';
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -242,6 +243,28 @@ bot.command('cancel', async (ctx) => {
   logSignal(runId, { schema: 'steel.run-cancelled.v1', run_id: runId, reason: 'User cancelled via bot' });
   ctx.reply(`⚠️ Cancellation flag recorded. Current pipeline step will still complete.
 Approve/Reject buttons will appear — tap Reject to block upload.`);
+});
+
+// Command: /inbox — on-demand email batch processing
+let inboxRunning = false;
+bot.command('inbox', async (ctx) => {
+  if (inboxRunning) {
+    await ctx.reply('⏳ Прогон почты уже идёт, подожди...');
+    return;
+  }
+  inboxRunning = true;
+  await ctx.reply('📬 Запускаю прогон входящей почты...');
+  const proc = spawn('node', ['batch-processor.js'], {
+    cwd: '/root/ClaudeClaw/workspace/starsmet/email-worker',
+    stdio: 'inherit',
+    env: { ...process.env },
+  });
+  proc.on('close', async (code) => {
+    inboxRunning = false;
+    if (code !== 0) {
+      await bot.api.sendMessage(allowedChatId, `❌ Прогон завершился с ошибкой (код ${code}).`);
+    }
+  });
 });
 
 // Unified gate callback handler: gate:<runId>:<gateId>:<decision>

@@ -30,7 +30,7 @@
     },
     "owner_runtime": {
       "type": "string",
-      "enum": ["geminiclaw"]
+      "enum": ["geminiclaw", "claudeclaw", "antigravityclaw"]
     },
     "project_name": {
       "type": "string",

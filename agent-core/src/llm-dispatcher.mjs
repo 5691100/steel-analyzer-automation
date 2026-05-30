@@ -296,9 +296,10 @@ export async function dispatchOpenChatQuestion(runId, gateId, question, agent, {
   let result;
   if (cli === 'codex') {
     result = spawn('codex', ['exec', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
+  } else if (cli === 'claude') {
+    result = spawn('claude', ['-p', '--no-session-persistence', '--strict-mcp-config', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
   } else {
-    const args = ['-p', '--no-session-persistence', '--strict-mcp-config', '-'];
-    result = spawn(cli, args, { input: prompt, timeout: 120_000, encoding: 'utf8' });
+    result = spawn(cli, ['-p', prompt], { timeout: 120_000, encoding: 'utf8' });
   }
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200) ?? 'unknown';

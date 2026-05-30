@@ -1,0 +1,9 @@
+{
+  "run_id": "steel-20260530-M9KO3",
+  "status": "failed",
+  "project_name": "unknown",
+  "created_at": "2026-05-30T08:39:47.152Z",
+  "totals": null,
+  "subproject_count": 0,
+  "error": "Failed to parse Claude JSON output (attempt 2). Raw output saved to /root/steel-analyzer-automation/agent-core/steel-bus/runs/steel-20260530-M9KO3/claude-run-retry1.log. Error: No JSON object found in output"
+}

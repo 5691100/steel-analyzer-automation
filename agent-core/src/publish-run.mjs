@@ -57,11 +57,18 @@ function gitFailure(result, fallback) {
 }
 
 function runGit(spawnSyncFn, repoRoot, args) {
-  const env = { 
-    ...process.env, 
-    GIT_TERMINAL_PROMPT: '0', 
-    GIT_ASKPASS: 'echo' 
+  const env = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_ASKPASS: 'echo',
   };
+  // Pass GITHUB_TOKEN via env vars (not argv) so it doesn't appear in process list
+  if (process.env.GITHUB_TOKEN) {
+    const encoded = Buffer.from(`x-access-token:${process.env.GITHUB_TOKEN}`).toString('base64');
+    env.GIT_CONFIG_COUNT = '1';
+    env.GIT_CONFIG_KEY_0 = 'http.extraheader';
+    env.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${encoded}`;
+  }
   
   const options = { 
     encoding: 'utf8', 
@@ -107,10 +114,6 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
   // Fix 4a: Rebase early (before writing files) to avoid dirty tree issues
   if (!options.dryRun) {
     const pullArgs = ['pull', '--rebase'];
-    if (process.env.GITHUB_TOKEN) {
-      const encoded = Buffer.from(`x-access-token:${process.env.GITHUB_TOKEN}`).toString('base64');
-      pullArgs.unshift('-c', `http.extraheader=Authorization: Basic ${encoded}`);
-    }
     const pullResult = runGit(spawnSyncFn, repoRoot, pullArgs);
     if (pullResult.status !== 0) {
       return { ok: false, error: 'rebase failed' };
@@ -127,17 +130,10 @@ export async function publishRun(runId, runDir, repoRoot = defaultRepoRoot(), op
   fs.writeFileSync(indexPath, `${JSON.stringify([summary, ...existing], null, 2)}\n`);
 
   if (!options.dryRun) {
-    // Fix 3: Use GITHUB_TOKEN for push if available
-    const pushArgs = ['push'];
-    if (process.env.GITHUB_TOKEN) {
-      const encoded = Buffer.from(`x-access-token:${process.env.GITHUB_TOKEN}`).toString('base64');
-      pushArgs.unshift('-c', `http.extraheader=Authorization: Basic ${encoded}`);
-    }
-
     for (const args of [
       ['add', 'dashboard/runs/'],
       ['commit', '-m', `chore(runs): add run ${runId}`],
-      pushArgs,
+      ['push'],
     ]) {
       const result = runGit(spawnSyncFn, repoRoot, args);
       if (result.status !== 0) {

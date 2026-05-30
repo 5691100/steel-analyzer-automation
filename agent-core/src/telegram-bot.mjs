@@ -15,6 +15,7 @@ import {
   makeGateKeyboard,
   registerGate,
   resolveGate,
+  loadOrphanedGates,
   GATE_AGENT,
   GATE_PROMPTS,
   GATE_HELP,
@@ -161,6 +162,14 @@ bot.command('run', async (ctx) => {
     validateRunId(runId);
   } catch (err) {
     return ctx.reply(`❌ Invalid run_id: ${err.message}`);
+  }
+
+  // folderId must be a Drive folder ID (33 alphanum chars) or a Drive URL containing one
+  const FOLDER_ID_RE = /^[A-Za-z0-9_-]{10,60}$/;
+  const driveMatch = folderId.match(/\/folders\/([A-Za-z0-9_-]{10,60})/);
+  const resolvedFolderId = driveMatch ? driveMatch[1] : folderId;
+  if (!FOLDER_ID_RE.test(resolvedFolderId)) {
+    return ctx.reply('❌ Invalid folder_id — expected a Google Drive folder ID or URL');
   }
 
   const runDir = join(RUNS_DIR, runId);
@@ -346,6 +355,15 @@ if (!process.env.NODE_TEST_CONTEXT) {
     process.exit(1);
   });
   console.log('Steel Bot started...');
+
+  // Warn about gates that were pending when the bot last stopped
+  const orphaned = loadOrphanedGates();
+  if (orphaned.length > 0) {
+    const chat = process.env.TELEGRAM_CHAT_ID;
+    const msg = orphaned.map(g => `• run <code>${g.runId}</code> gate <b>${g.gateId}</b> (${g.at})`).join('\n');
+    bot.api.sendMessage(chat, `⚠️ Бот перезапустился. Следующие runs потеряли gate:\n${msg}\n\nПерезапусти их вручную через /run.`, { parse_mode: 'HTML' })
+      .catch(() => {});
+  }
 }
 
 export { bot, logSignal, __setTelegramBotTestDeps };

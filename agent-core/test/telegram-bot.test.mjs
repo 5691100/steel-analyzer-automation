@@ -98,7 +98,7 @@ describe('Telegram Bot Logic', () => {
 
   it('publishes a failed run entry when the pipeline crashes before approval', async () => {
     const runId = 'telegram-pipeline-crash';
-    const folderId = 'folder-id';
+    const folderId = 'valid-folder-id-1234567';
     const runDir = path.join(TEST_RUNS_DIR, runId);
     createdRunDirs.add(runDir);
     fs.mkdirSync(runDir, { recursive: true });

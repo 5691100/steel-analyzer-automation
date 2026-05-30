@@ -51,9 +51,13 @@ function makeExcelMock(sheetNames, weightCell = 1500) {
         if (!sheetNames.includes(name)) return null;
         if (name === 'Project Summary') {
           return {
+            eachRow(cb) {
+              // Simulate single "All" row: col1='All', col5=weightCell
+              cb({ getCell: (n) => ({ value: n === 1 ? 'All' : n === 5 ? weightCell : null }) }, 2);
+            },
             getColumn: () => ({
               eachCell: (opts, cb) => {
-                cb({ value: weightCell, type: 2 }, 2); // type 2 = number
+                cb({ value: weightCell, type: 2 }, 2);
               },
             }),
           };

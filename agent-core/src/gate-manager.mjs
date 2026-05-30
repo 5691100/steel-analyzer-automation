@@ -1,8 +1,39 @@
 import { InlineKeyboard } from 'grammy';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// Gate state — in-memory, process-scoped
+const RUNS_DIR = path.resolve(fileURLToPath(import.meta.url), '../../steel-bus/runs');
+
+// Gate state — in-memory, backed by per-run pending-gate.json for restart resilience
 export const pendingGates = new Map(); // runId → { gateId, resolve }
 export const chatQuestionState = new Map(); // chatId → { runId, gateId, agent }
+
+function gateFile(runId) {
+  return path.join(RUNS_DIR, runId, 'pending-gate.json');
+}
+
+function persistGate(runId, gateId) {
+  try {
+    fs.writeFileSync(gateFile(runId), JSON.stringify({ runId, gateId, at: new Date().toISOString() }));
+  } catch { /* non-fatal */ }
+}
+
+function clearGate(runId) {
+  try { fs.unlinkSync(gateFile(runId)); } catch { /* non-fatal */ }
+}
+
+/** Returns list of runs that had pending gates when process last stopped. */
+export function loadOrphanedGates() {
+  try {
+    return fs.readdirSync(RUNS_DIR)
+      .map(runId => {
+        const f = gateFile(runId);
+        try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; }
+      })
+      .filter(Boolean);
+  } catch { return []; }
+}
 
 export const GATE_AGENT = {
   g1_claude: 'claude',
@@ -49,6 +80,7 @@ export function makeGateKeyboard(runId, gateId) {
 export function registerGate(runId, gateId) {
   return new Promise((resolve) => {
     pendingGates.set(runId, { gateId, resolve });
+    persistGate(runId, gateId);
   });
 }
 
@@ -57,6 +89,7 @@ export function resolveGate(runId, gateId, decision) {
   const gate = pendingGates.get(runId);
   if (!gate || gate.gateId !== gateId) return false;
   pendingGates.delete(runId);
+  clearGate(runId);
   gate.resolve(decision);
   return true;
 }

@@ -233,20 +233,23 @@ describe('publishRun', () => {
     assert.equal(fs.existsSync(path.join(repoRoot, 'dashboard/runs/index.json')), false);
   });
 
-  it('adds GITHUB_TOKEN to push command via -c http.extraheader', async () => {
+  it('passes GITHUB_TOKEN via GIT_CONFIG env vars (not argv) to avoid process list exposure', async () => {
     process.env.GITHUB_TOKEN = 'test-token';
-    const calls = [];
-    const spawnSyncFn = (_command, args) => {
-      calls.push(args);
+    const capturedEnvs = [];
+    const spawnSyncFn = (_command, args, opts) => {
+      capturedEnvs.push({ args, env: opts?.env ?? {} });
       return { status: 0 };
     };
 
     await publishRun('token-test', runDir, repoRoot, { spawnSyncFn });
 
     const encoded = Buffer.from('x-access-token:test-token').toString('base64');
-    const pushCall = calls.find((c) => c.includes('push'));
-    assert.ok(pushCall.includes('-c'), 'Push should include -c');
-    assert.ok(pushCall.includes(`http.extraheader=Authorization: Basic ${encoded}`));
+    const pushCall = capturedEnvs.find(c => c.args.includes('push'));
+    assert.ok(pushCall, 'push call not found');
+    // Token must be in env, NOT in argv
+    assert.ok(!pushCall.args.some(a => String(a).includes('extraheader')), 'Token must not appear in git argv');
+    assert.strictEqual(pushCall.env.GIT_CONFIG_KEY_0, 'http.extraheader');
+    assert.ok(pushCall.env.GIT_CONFIG_VALUE_0.includes(`Basic ${encoded}`));
 
     delete process.env.GITHUB_TOKEN;
   });

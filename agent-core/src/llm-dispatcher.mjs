@@ -44,21 +44,33 @@ function extractJsonFromText(text) {
     return JSON.parse(text);
   } catch { /* continue */ }
 
-  // Strategy 2: Find the first { and match to the last corresponding }
+  // Strategy 2: Find the first { and match to the closing } — string-aware scanner
   const firstBrace = text.indexOf('{');
   if (firstBrace === -1) throw new Error('No JSON object found in output');
 
-  // Find matching closing brace by counting depth
-  let depth = 0;
-  let lastClose = -1;
-  for (let i = firstBrace; i < text.length; i++) {
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
-      depth--;
-      if (depth === 0) lastClose = i;
+  // Scan forward skipping string literals so inner braces don't confuse depth count
+  function findMatchingClose(str, start) {
+    let depth = 0;
+    let i = start;
+    while (i < str.length) {
+      const ch = str[i];
+      if (ch === '"') {
+        i++;
+        while (i < str.length) {
+          if (str[i] === '\\') { i += 2; continue; }
+          if (str[i] === '"') { i++; break; }
+          i++;
+        }
+        continue;
+      }
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) return i; }
+      i++;
     }
+    return -1;
   }
 
+  const lastClose = findMatchingClose(text, firstBrace);
   if (lastClose === -1) throw new Error('No balanced JSON object found in output');
 
   const candidate = text.slice(firstBrace, lastClose + 1);
@@ -217,6 +229,16 @@ export async function dispatchClaudeAnalysis(runId, runDir, sourcesDir, {
 
     if (result.error) {
       lastError = result.error;
+      continue;
+    }
+
+    if (result.status !== 0) {
+      lastError = new Error(`Claude exited with status ${result.status}. stderr: ${(result.stderr ?? '').slice(0, 200)}`);
+      console.warn(lastError.message);
+      if (attempt < maxRetries) {
+        console.log(`Will retry in 10 seconds...`);
+        await new Promise(r => setTimeout(r, 10_000));
+      }
       continue;
     }
 

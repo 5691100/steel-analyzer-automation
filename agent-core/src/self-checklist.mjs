@@ -122,12 +122,19 @@ export async function runSelfChecklist(runDir, deps = {}) {
     } else {
       try {
         const sheet = wb.getWorksheet('Project Summary');
-        // Column 5 = "Total Weight (t)" — stored in tonnes; multiply by 1000 to get kg
+        // Column 5 = "Total Weight (t)". For multi-subproject sheets the total is
+        // on the "All" row (col 1 = "All"). Fall back to first numeric if not found.
         let xlsxWeightT = null;
         if (sheet) {
-          sheet.getColumn(5).eachCell({ includeEmpty: false }, (cell) => {
-            if (xlsxWeightT === null && typeof cell.value === 'number') {
-              xlsxWeightT = cell.value;
+          sheet.eachRow((row) => {
+            const label = row.getCell(1).value;
+            const val = row.getCell(5).value;
+            if (typeof val === 'number') {
+              if (String(label).trim() === 'All') {
+                xlsxWeightT = val; // authoritative — stop searching
+              } else if (xlsxWeightT === null) {
+                xlsxWeightT = val; // fallback if no "All" row found
+              }
             }
           });
         }

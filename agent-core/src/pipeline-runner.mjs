@@ -65,6 +65,18 @@ function preprocessSources(sourcesDir) {
     const unzipDir = path.join(zipDir, 'unzipped');
     fs.mkdirSync(unzipDir, { recursive: true });
     console.log(`Unzipping: ${path.relative(sourcesDir, zipPath)}...`);
+    // Validate entries before extraction — guard against path traversal and zip bombs
+    const inspect = spawnSync('unzip', ['-Z1', zipPath], { encoding: 'utf8', timeout: 30_000 });
+    const entries = (inspect.stdout || '').split('\n').filter(Boolean);
+    const dangerous = entries.filter(e => e.includes('..') || path.isAbsolute(e));
+    if (dangerous.length > 0) {
+      console.warn(`  ⚠ Skipping unsafe zip (path traversal entries): ${path.basename(zipPath)}`);
+      continue;
+    }
+    if (entries.length > 2000) {
+      console.warn(`  ⚠ Skipping zip bomb candidate (${entries.length} entries): ${path.basename(zipPath)}`);
+      continue;
+    }
     const r = spawnSync('unzip', ['-o', '-d', unzipDir, zipPath], {
       encoding: 'utf8',
       timeout: 120_000,
@@ -329,7 +341,7 @@ export async function runPipeline(runId, folderId, notifyFn, {
     await notifyFn(`✅ Self-checklist passed`);
 
     // Phase: dashboard
-    const repoRoot = path.resolve(runDir, '../../..');
+    const repoRoot = path.resolve(runDir, '../../../..');
     const dashResult = await doPublish(runId, runDir, repoRoot, {});
     const dashboardUrl = process.env.VERCEL_PROJECT_URL
       ? `https://${process.env.VERCEL_PROJECT_URL}/runs/${runId}`

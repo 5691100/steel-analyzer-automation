@@ -48,7 +48,7 @@ describe('dispatchOpenChatQuestion', () => {
     );
     assert.equal(answer, 'В источниках 42 профиля.');
     assert.equal(calledCmd, 'claude');
-    assert.deepEqual(calledArgs, ['-p', '--no-session-persistence', '-']);
+    assert.deepEqual(calledArgs, ['-p', '--no-session-persistence', '--strict-mcp-config', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('Сколько профилей?'));
   });
 
@@ -90,7 +90,7 @@ describe('dispatchClaudeAnalysis', () => {
     });
 
     assert.equal(calledCmd, 'claude');
-    assert.deepEqual(calledArgs, ['-p', '--no-session-persistence', '-']);
+    assert.deepEqual(calledArgs, ['-p', '--no-session-persistence', '--strict-mcp-config', '-']);
     assert.ok(calledOpts && calledOpts.input && calledOpts.input.includes('run-123'));
     assert.equal(calledOpts.cwd, '/tmp');
     fs.rmSync(tempDir, { recursive: true, force: true });

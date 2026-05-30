@@ -197,7 +197,7 @@ export async function dispatchClaudeAnalysis(runId, runDir, sourcesDir, {
 
     console.log(`Dispatching Claude analysis for run ${runId} (prompt: ${promptChars} chars, attempt ${attempt + 1})...`);
     const dispatchStart = Date.now();
-    const result = spawn('claude', ['-p', '--no-session-persistence', '-'], {
+    const result = spawn('claude', ['-p', '--no-session-persistence', '--strict-mcp-config', '-'], {
       input: prompt,
       timeout: 4_200_000,
       encoding: 'utf8',
@@ -297,7 +297,7 @@ export async function dispatchOpenChatQuestion(runId, gateId, question, agent, {
   if (cli === 'codex') {
     result = spawn('codex', ['exec', '-'], { input: prompt, timeout: 120_000, encoding: 'utf8' });
   } else {
-    const args = ['-p', '--no-session-persistence', '-'];
+    const args = ['-p', '--no-session-persistence', '--strict-mcp-config', '-'];
     result = spawn(cli, args, { input: prompt, timeout: 120_000, encoding: 'utf8' });
   }
   if (result.error || result.status !== 0) {
@@ -329,7 +329,7 @@ Return ONLY a JSON object with two fields:
 Analysis JSON:
 ${analysisJson}`;
 
-  const result = spawn('claude', ['-p', '--no-session-persistence', '-'], {
+  const result = spawn('claude', ['-p', '--no-session-persistence', '--strict-mcp-config', '-'], {
     input: prompt,
     timeout: 900_000,
     encoding: 'utf8',

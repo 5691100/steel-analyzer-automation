@@ -259,10 +259,16 @@ bot.command('inbox', async (ctx) => {
     stdio: 'inherit',
     env: { ...process.env },
   });
+  proc.on('error', (err) => {
+    inboxRunning = false;
+    bot.api.sendMessage(allowedChatId, `❌ Не удалось запустить прогон: ${err.message}`).catch(() => {});
+  });
   proc.on('close', async (code) => {
     inboxRunning = false;
     if (code !== 0) {
-      await bot.api.sendMessage(allowedChatId, `❌ Прогон завершился с ошибкой (код ${code}).`);
+      bot.api.sendMessage(allowedChatId, `❌ Прогон завершился с ошибкой (код ${code}).`).catch(() => {});
+    } else {
+      bot.api.sendMessage(allowedChatId, `✅ Прогон почты завершён.`).catch(() => {});
     }
   });
 });

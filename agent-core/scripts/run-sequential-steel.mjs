@@ -25,7 +25,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { runPipeline } from '../src/pipeline-runner.mjs';
-import { dispatchGeminiAnalysis, dispatchAntigravityQA } from '../src/llm-dispatcher.mjs';
+import { dispatchClaudeAnalysis, dispatchAntigravityQA } from '../src/llm-dispatcher.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -142,7 +142,7 @@ async function main() {
 
         // Wrap doAnalysis to pass customComment
         const doAnalysis = async (rid, rDir, srcDir) => {
-          return dispatchGeminiAnalysis(rid, rDir, srcDir, { customComment: comment || null });
+          return dispatchClaudeAnalysis(rid, rDir, srcDir, { customComment: comment || null });
         };
 
         // Custom QA function that routes to ClaudeClaw and polls for the response

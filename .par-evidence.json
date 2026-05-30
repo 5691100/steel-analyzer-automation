@@ -1,10 +1,15 @@
 {
   "sprint": 1,
+  "feature": "remove-gemini-references-fix-drive-download",
   "claude_product": "ACCEPTED",
   "technical_review": "APPROVE",
+  "technical_fixes_round2": [
+    "run-sequential-steel.mjs: dispatchGeminiAnalysis → dispatchClaudeAnalysis (broken import missed in sprint)",
+    "telegram-bot.mjs /inbox: proc.on('error') guard + .catch() on sendMessage + success message on code 0"
+  ],
   "docs_update": "UPDATED",
   "docs_review": "PASS",
+  "tests": "139/139",
   "provider": "claude-split-focus",
-  "ts": "2026-05-28T16:30:00Z",
-  "notes": "Technical reviewer initially REQUEST_CHANGES (gate-manager.mjs missed). Fixed inline. Product reviewer confirmed 139/139 tests, full g1_gemini->g1_claude consistency."
+  "ts": "2026-05-30T08:15:00Z"
 }

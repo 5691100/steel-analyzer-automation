@@ -1,6 +1,6 @@
 # steel-analyzer-automation
 
-Automated steel structure analysis pipeline. Accepts raw project files from Google Drive, runs AntigravityClaw (agy) extraction, generates Excel workbooks, performs QA review, integrates via CodexClaw, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
+Automated steel structure analysis pipeline. Accepts raw project files from Google Drive (with recursive subfolder support), converts IFC/Excel/DWG to text, runs Claude analysis with a 160K-char priority-sorted budget, generates Excel workbooks, performs QA review, integrates via CodexClaw, uploads verified artifacts back to Drive, and publishes run summaries to a static dashboard.
 
 ## Stack
 
@@ -12,10 +12,11 @@ Automated steel structure analysis pipeline. Accepts raw project files from Goog
 ## Architecture
 
 ```
-telegram-bot.mjs (Drive-link intake, /run, /status, /cancel, Open-chat mode)
+telegram-bot.mjs (Drive-link intake, /run, /status, /cancel, /inbox, Open-chat mode)
   -> pipeline-runner.mjs (runPipeline, 5-gate flow + GEPA phase, maxCorrections=3)
-      -> steel-drive.mjs download (User OAuth, MD5-verified)
-      -> llm-dispatcher.mjs (AntigravityClaw analysis via agy, Open-chat dispatch)
+      -> steel-drive.mjs download (User OAuth, MD5-verified, recursive subfolder)
+      -> pipeline-runner.mjs preprocessing (unzip .zip, IFC→txt via ifcopenshell, xlsx→txt via openpyxl, DWG→file index)
+      -> llm-dispatcher.mjs (Claude analysis via claude -p, 160K char budget, priority-sorted, Open-chat dispatch)
           -> steel-analysis-prompt.mjs (buildAnalysisPrompt)
           -> workbook-generator.mjs (JSON -> 3 xlsx)
           -> artifact-verifier.mjs (output check)
@@ -75,13 +76,13 @@ dashboard/
 agent-core/
   package.json                        npm root (steel-agent-core)
   scripts/
-    steel-drive.mjs                   Drive wrapper (799 lines)
+    steel-drive.mjs                   Drive wrapper, recursive subfolder download (downloadRecursive), MD5-verified (837 lines)
     steel-orchestrator.mjs            File-bus watcher (843 lines)
   src/
-    telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, Open-chat mode, dashboard publish (320 lines)
-    pipeline-runner.mjs               runPipeline(): G1:analysis, G2:QA, G3:correction ×3, Phase:self-checklist, Phase:dashboard, Phase:GEPA (non-blocking, via gepa-via-codex.mjs), G5:upload
+    telegram-bot.mjs                  grammy bot, Drive-link intake, 5-gate flow, /inbox email batch on-demand, Open-chat mode, dashboard publish (351 lines)
+    pipeline-runner.mjs               runPipeline(): unzip→IFC/xlsx/DWG→txt conversion, G1:Claude analysis (160K budget), G2:QA, G3:correction ×3, Phase:self-checklist, Phase:dashboard, Phase:GEPA (non-blocking), G5:upload (402 lines)
     gate-manager.mjs                  Pending gate registry, InlineKeyboard factory, resolveGate (62 lines)
-    llm-dispatcher.mjs                dispatchClaudeAnalysis() -> analysis.json, dispatchAntigravityQA(), dispatchCodexReview() via callCodex, writeGepaRegister(), dispatchOpenChatQuestion(); exports extractJsonFromText (410 lines)
+    llm-dispatcher.mjs                dispatchClaudeAnalysis() — claude -p stdin, 160K char budget, file priority sort (BoM>RFQ>drawings), 50MB maxBuffer; dispatchAntigravityQA(), dispatchCodexReview() via callCodex, writeGepaRegister(), dispatchOpenChatQuestion(); exports extractJsonFromText (448 lines)
     publish-run.mjs                   publishRun(): writes dashboard/runs JSON, git pull/commit/push with Basic auth GITHUB_TOKEN, step-aware rollback on failure (161 lines)
     template-config.mjs               Externalized template config: sheet names, column defs, category aliases (198 lines)
     dashboard-generator.mjs           generateDashboard() -> dashboard.html; uploaded to Drive with xlsx (206 lines)
@@ -124,5 +125,5 @@ docs/
 
 `requested` -> `sources_manifested` -> `sources_downloaded` -> `extraction_done` -> `workbooks_generated` -> `workbooks_validated` -> `producer_handoff_done` -> `claude_review_requested` -> `claude_review_passed` | `claude_review_blocked` -> `codex_integration_requested` -> `codex_integration_done` -> `gepa_proposed` -> `gepa_reviewed` -> `upload_ready` -> `uploaded_verified` -> `closed` | `dead_letter`
 
-<!-- sprint:18 -->
-<!-- updated-by-superflow:2026-05-27 -->
+<!-- sprint:19 -->
+<!-- updated-by-superflow:2026-05-30 -->

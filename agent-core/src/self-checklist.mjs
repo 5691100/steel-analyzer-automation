@@ -98,7 +98,8 @@ export async function runSelfChecklist(runDir, deps = {}) {
 
   // ── 5 & 6. ExcelJS-based checks ───────────────────────────────────────────
   if (xlsxFiles.length > 0) {
-    const firstXlsx = path.join(outputDir, xlsxFiles[0]);
+    const descFile = xlsxFiles.find(f => f.includes('_Description.'));
+    const firstXlsx = path.join(outputDir, descFile ?? xlsxFiles[0]);
     let wb = null;
     let xlsxError = null;
 
